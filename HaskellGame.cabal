@@ -31,6 +31,7 @@ library
   build-depends:
       base >=4.7 && <5
     , gloss
+    , gloss-juicy
   default-language: Haskell2010
 
 executable HaskellGame-exe
@@ -44,6 +45,7 @@ executable HaskellGame-exe
       HaskellGame
     , base >=4.7 && <5
     , gloss
+    , gloss-juicy
   default-language: Haskell2010
 
 test-suite HaskellGame-test
@@ -58,4 +60,5 @@ test-suite HaskellGame-test
       HaskellGame
     , base >=4.7 && <5
     , gloss
+    , gloss-juicy
   default-language: Haskell2010
