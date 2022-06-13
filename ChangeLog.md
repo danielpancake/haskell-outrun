@@ -1,3 +1,3 @@
 # Changelog for HaskellGame
 
-Kinda working road for now
+Working road (lines) retro scrolling
