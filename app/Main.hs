@@ -16,23 +16,31 @@ data Camera = Camera
     , cameraRenderDistance :: Int        -- Render distance
     }
 
-changeRenderDistance :: Camera -> Int -> Camera
-changeRenderDistance (Camera pos res depth _) = Camera pos res depth
+changeRenderDistance :: Int -> Camera -> Camera
+changeRenderDistance renderDist cam = cam { cameraRenderDistance = renderDist }
 
-shiftCamera :: Camera -> Position -> Camera
-shiftCamera (Camera pos res depth rendDist) (x2, y2, z2) =
-    Camera newPos res depth rendDist
+shiftCamera :: Position -> Camera -> Camera
+shiftCamera (x2, y2, z2) cam = cam { cameraPosition = newPos }
     where
-        (x1, y1, z1) = pos
+        (x1, y1, z1) = cameraPosition cam
         newPos = (x1 + x2, y1 + y2, z1 + z2)
 
 data RoadLine = RoadLine
     { roadLinePosition  :: (Float, Float) -- (y, z) coordinates of the line
-    , roadLineCurvature :: Float          -- Curvature
+    , roadLineCurveRate :: Float          -- Curvature
     , roadLineColor     :: Color          -- Color of the road segment
     }
 
-data TrackLength    = SHORT | NORMAL | LONG
+changeRoadLineCurvature :: Float -> RoadLine -> RoadLine
+changeRoadLineCurvature curve roadLine = roadLine { roadLineCurveRate = curve }
+
+shiftRoadLine :: (Float, Float) -> RoadLine -> RoadLine
+shiftRoadLine (dy, dz) rl = rl { roadLinePosition = newPos }
+    where
+        (y, z) = roadLinePosition rl
+        newPos = (y + dy, z + dz)
+
+data TrackLength = SHORT | NORMAL | LONG
 trackLengthValue :: TrackLength -> Int
 trackLengthValue length = case length of
     SHORT  -> 50
@@ -44,7 +52,7 @@ trackDirToSignum :: Num a => TrackDirection -> (a -> a)
 trackDirToSignum LEFT  = negate
 trackDirToSignum RIGHT = id
 
-data TrackCurve  = NONE | GENTLE TrackDirection | MEDIUM TrackDirection | STEEP TrackDirection
+data TrackCurve = NONE | GENTLE TrackDirection | MEDIUM TrackDirection | STEEP TrackDirection
 trackCurveValue :: TrackCurve -> Float
 trackCurveValue curve = case curve of
     GENTLE dir -> trackDirToSignum dir 0.1
@@ -93,7 +101,7 @@ drawTrack = drawTrack' (0, 0)
                 ((x2, y2), w2) = project cam line2
 
                 rendDist = cameraRenderDistance cam
-                cam' = changeRenderDistance cam (rendDist - 1)
+                cam' = changeRenderDistance (rendDist - 1) cam 
 
                 x'  = x + dx
                 dx' = dx + curve
@@ -157,7 +165,7 @@ sampleTrack2 = trackBuilder 360
 
                 curve = 0.1
 
-                ly = sin (n' / 30) * 5000
+                ly = sin (n' / 30) * 1500
                 lz = n' * 200
 
                 col = if even n
@@ -166,33 +174,34 @@ sampleTrack2 = trackBuilder 360
 
 -- | Makes a track given its length, curve rate and a list of alternating colors
 makeTrack :: TrackLength -> TrackCurve -> [Color] -> RacingTrack
-makeTrack trackLength trackCurve colors = take length (gameRacingTrack trackPart)
+makeTrack trackLength trackCurve colors = take length (infRacingTrack track)
     where
         length = trackLengthValue trackLength
-        curve = trackCurveValue trackCurve
 
-        trackPart = foldr (connectTracks . (:[]) . RoadLine (0, 0) curve) [] colors
+        track = addCurve trackCurve
+            (foldr (connectTracks . (:[]) . RoadLine (0, 0) 0) [] colors)
+
+-- | Adds a curve rate to a track
+addCurve :: TrackCurve -> RacingTrack -> RacingTrack
+addCurve curve = map (changeRoadLineCurvature (trackCurveValue curve))
 
 -- | Shifts the track by the given amount
-shiftTrack :: RacingTrack -> Float -> RacingTrack
-shiftTrack track dz =
-    map (\(RoadLine (ly, lz) curv col) ->
-        RoadLine (ly, lz + dz) curv col) track
+shiftTrack :: Float -> RacingTrack-> RacingTrack
+shiftTrack dz = map (shiftRoadLine (0, dz))
 
 -- | Connects two tracks together
 connectTracks :: RacingTrack -> RacingTrack -> RacingTrack
-connectTracks t1 t2 = mergedTrack
+connectTracks track = (track ++) . shiftTrack delta
     where
-        mergedTrack = t1 ++ shiftTrack t2 delta
-        delta = fromIntegral (length t1) * roadSegmentLength
+        delta = fromIntegral (length track) * roadSegmentLength
 
 -- | Concatenates a list of tracks together
 connectTracksMany :: [RacingTrack] -> RacingTrack
 connectTracksMany = foldr connectTracks []
 
 -- | Generates infinite racing track from the given one
-gameRacingTrack :: RacingTrack -> RacingTrack
-gameRacingTrack track = connectTracks track (gameRacingTrack track)
+infRacingTrack :: RacingTrack -> RacingTrack
+infRacingTrack track = connectTracks track (infRacingTrack track)
 
 ----------------------------------------------------------------
 
@@ -220,7 +229,7 @@ updateGame dt (GameState cam delta track) = newState
 
         ddy = (cameraHeight + ly) - cy
 
-        newState = GameState (shiftCamera cam (0, ddy * 0.5, ddz * 100)) delta updatedTrack
+        newState = GameState (shiftCamera (0, ddy * 0.5, ddz * 100) cam) delta updatedTrack
 
 gameWindow :: Display
 gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
@@ -228,5 +237,5 @@ gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
 main :: IO ()
 main = play gameWindow white 60 initState drawGame handleGame updateGame
     where
-        initState = GameState initCamera (0, 0) (gameRacingTrack sampleTrack)
+        initState = GameState initCamera (0, 0) (infRacingTrack sampleTrack)
         initCamera = Camera (0, cameraHeight, 0) (1024, 768) 0.84 100
