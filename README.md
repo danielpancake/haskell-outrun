@@ -1,5 +1,6 @@
 # HaskellGame
 
+Do not edit `HaskellGame.cabal` by hand as it is being generated automatically from `package.yaml`
 
 ## Troubleshooting
 | Problem | Solution |

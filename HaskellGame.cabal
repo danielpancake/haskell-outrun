@@ -5,8 +5,8 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           HaskellGame
-version:        0.1.2.0
-description:    Please see the README on GitHub at <https://github.com/danielpancake/HaskellGame#readme>
+version:        0.1.3.0
+description:    Outrun clone game made in Haskell
 homepage:       https://github.com/danielpancake/HaskellGame#readme
 bug-reports:    https://github.com/danielpancake/HaskellGame/issues
 author:         danielpancake and Leon Parepko
