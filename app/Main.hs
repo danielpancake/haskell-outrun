@@ -36,12 +36,19 @@ shiftCamera (x2, y2, z2) cam = cam { cameraPosition = newPos }
 
 data RoadLine = RoadLine
     { roadLinePosition  :: (Float, Float) -- (y, z) coordinates of the line
-    , roadLineCurveRate :: Float          -- Curvature
-    , roadLineColor     :: Color          -- Color of the road segment
+
+    -- Both curve and pitch values make the camera follow the movement,
+    -- thereas roadline height does not
+    , roadLineCurveRate :: Float -- Curve rate
+    , roadLinePitchRate :: Float -- Pitch rate
+    , roadLineColor     :: Color -- Color of the road segment
     }
 
 changeRoadLineCurveRate :: Float -> RoadLine -> RoadLine
 changeRoadLineCurveRate curve roadLine = roadLine { roadLineCurveRate = curve }
+
+changeRoadLinePitchRate :: Float -> RoadLine -> RoadLine
+changeRoadLinePitchRate pitch roadLine = roadLine { roadLinePitchRate = pitch }
 
 shiftRoadLine :: (Float, Float) -> RoadLine -> RoadLine
 shiftRoadLine (dy, dz) rl = rl { roadLinePosition = newPos }
@@ -56,23 +63,33 @@ trackLengthValue length = case length of
     NormalTrack -> 150
     LongTrack   -> 300
 
-data TrackCurveDirection = TurningLeft | TurningRight
-trackCurveDir :: Num a => TrackCurveDirection -> (a -> a)
-trackCurveDir TurningLeft  = negate
-trackCurveDir TurningRight = id
+data TrackChangeRate = Gently | Moderately | Steeply
 
-data TrackCurve = Gently | Moderately | Steeply
-trackCurveValue :: TrackCurve -> Float
+trackCurveValue :: TrackChangeRate -> Float
 trackCurveValue curve = case curve of
     Gently     -> 0.1
     Moderately -> 0.5
     Steeply    -> 0.8
 
-data TrackHillDirection = GoingUp | GoingDown
-trackHillDir :: Num a => TrackHillDirection -> (a -> a)
-trackHillDir GoingUp   = id
-trackHillDir GoingDown = (1 -)
+trackPitchValue :: TrackChangeRate -> Float
+trackPitchValue pitch = case pitch of
+    Gently     -> 1
+    Moderately -> 5
+    Steeply    -> 8
 
+data TrackCurveDirection = TurningLeft | TurningRight
+trackCurveDir :: Num a => TrackCurveDirection -> (a -> a)
+trackCurveDir dir = case dir of
+    TurningLeft  -> negate
+    TurningRight -> id
+
+data TrackPitchDirection = GoingUp | GoingDown
+trackPitchDir :: Num a => TrackPitchDirection -> (a -> a)
+trackPitchDir dir = case dir of
+    GoingDown -> negate
+    GoingUp   -> id
+
+-- | Hills are elevations of the road segments height
 data TrackHill = SmallHill | MediumHill | LargeHill
 trackHillHeight :: TrackHill -> Float
 trackHillHeight hill = case hill of
@@ -80,9 +97,19 @@ trackHillHeight hill = case hill of
     MediumHill -> 5000
     LargeHill  -> 8000
 
+trackHillDir :: Num a => TrackPitchDirection -> (a -> a)
+trackHillDir dir = case dir of
+    GoingDown -> (1 -) -- InterpolationFunc takes values from 0 to 1
+                       -- For that reason, inversion is done that way
+    GoingUp   -> id
+
 type RacingTrack = [RoadLine]
 
-data GameState = GameState Camera (Float, Float) RacingTrack
+data GameState = GameState
+    Camera
+    (Float, Float) -- Movement vector
+    RacingTrack
+    (Float, Float) -- Position of the car
 
 ---- | Interpolation functions |--------------------------------
 
@@ -96,7 +123,6 @@ approach current target speed =
 
 ---- | All interpolation functions below (typed InterpolationFunc)
 ---- | take a value between 0 and 1
-
 type InterpolationFunc = Float -> Float
 
 easeInOutSine :: InterpolationFunc
@@ -130,32 +156,34 @@ drawRoadSegment col (x1, y1) w1 (x2, y2) w2 =
             ]
 
 drawTrack :: Camera -> RacingTrack -> Picture
-drawTrack = drawTrack' (0, 0)
+drawTrack = drawTrack' (0, 0, 0, 0)
     where
         drawTrack' _ _ [] = blank     -- Cannot draw a segment from an empty list
         drawTrack' _ _ [line] = blank -- Cannot draw a segment from a single line ¯\_(ツ)_/¯
         drawTrack' _ (Camera _ _ _ 0) _ = blank -- Zero render distance
 
-        drawTrack' (x, dx) cam (line1 : lines) =
-            drawTrack' (x', dx') cam' lines <> segment
-
+        drawTrack' (x, dx, y, dy) cam (line1 : lines) =
+            drawTrack' (x', dx', y', dy') cam' lines <> segment
             where
-                RoadLine (ly, lz) curve col = line1
+                RoadLine (ly, lz) curve pitch col = line1
 
-                ((x1, y1), w1) = project cam line1
+                y'  = y + dy
+                dy' = dy + pitch
+
+                ((x1, y1), w1) = project cam (shiftRoadLine (y,  0) line1)
                 (line2 : _ ) = lines
-                ((x2, y2), w2) = project cam line2
+                ((x2, y2), w2) = project cam (shiftRoadLine (y', 0) line2)
 
                 rendDist = cameraRenderDistance cam
                 cam' = changeRenderDistance (rendDist - 1) cam
 
+                (_, _, cz) = cameraPosition cam
+
                 x'  = x + dx
                 dx' = dx + curve
 
-                (_, _, cz) = cameraPosition cam
-
                 segment = if cz <= lz
-                    then drawRoadSegment col (x1 + x, y1) w1 (x2 + x', y2) w2 <> drawRoadSegment black (x1 + x, y1) w1 (x2 + x', y2) w2
+                    then drawRoadSegment col (x1 + x, y1) w1 (x2 + x', y2) w2
                     else blank
 
 project :: Camera -> RoadLine
@@ -164,7 +192,7 @@ project :: Camera -> RoadLine
 project (Camera (cx, cy, cz) (width, height) depth _) roadLine =
     (screenPos, w)
     where
-        RoadLine (ly, lz) _ _ = roadLine
+        RoadLine (ly, lz) _ _ _ = roadLine
 
         halfWidth = fromIntegral width / 2
         halfHeight = fromIntegral height / 2
@@ -179,7 +207,7 @@ project (Camera (cx, cy, cz) (width, height) depth _) roadLine =
         screenPos = (sx - halfWidth, sy - halfHeight)
 
 drawGame :: GameState -> Picture
-drawGame (GameState cam _ track) = drawTrack cam track
+drawGame (GameState cam _ track playerPos) = drawTrack cam track
 
 ----------------------------------------------------------------
 
@@ -200,7 +228,9 @@ sampleTrack = connectTracksMany
         addCurve Steeply TurningRight (
             addHill LargeHill GoingUp (makeTrack ShortTrack [red, dark red])
         ),
-        addHill LargeHill GoingDown (makeTrack ShortTrack [green, dark green]),
+        addCurve Steeply TurningLeft(
+            addHill LargeHill GoingDown (makeTrack ShortTrack [green, dark green])
+        ),
         addHill LargeHill GoingDown (makeTrack ShortTrack [green, dark green])
     ]
 
@@ -210,11 +240,14 @@ sampleTrack2 = trackBuilder 360
     where
         trackBuilder 0 = []
         trackBuilder n =
-            trackBuilder (n - 1) ++ [RoadLine (ly, lz) curve col]
+            trackBuilder (n - 1) ++ [RoadLine (0, lz) curve pitch col]
             where
                 n' = fromIntegral n
 
-                curve = 0.1
+                pitch = if n < 180
+                    then pi^2*cos(pi*n'/180)/2
+                    else 0
+                curve = 0
 
                 ly = sin (n' / 30) * 1500
                 lz = n' * 200
@@ -234,30 +267,43 @@ makeTrackCustom
 makeTrackCustom trackLength colors = take length (infRacingTrack track)
     where
         length = fromCustom trackLengthValue trackLength
-        track = foldr (connectTracks . (:[]) . RoadLine (0, 0) 0) [] colors
+        track = foldr (connectTracks . (:[]) . RoadLine (0, 0) 0 0) [] colors
 
 -- | Adds a curve to a track
-addCurve :: TrackCurve -> TrackCurveDirection -> RacingTrack -> RacingTrack
-addCurve curve = addCurveCustom (Common curve)
+addCurve :: TrackChangeRate -> TrackCurveDirection -> RacingTrack -> RacingTrack
+addCurve = addCurveCustom . Common
 
 -- | Adds a custom curve to a track
 addCurveCustom
-    :: WithCustom TrackCurve Float
+    :: WithCustom TrackChangeRate Float
     -> TrackCurveDirection
     -> RacingTrack -> RacingTrack
-addCurveCustom curve dir = map (changeRoadLineCurveRate (trackCurveDir dir (fromCustom trackCurveValue curve)))
+addCurveCustom curve dir =
+    map (changeRoadLineCurveRate (trackCurveDir dir (fromCustom trackCurveValue curve)))
+
+-- | Adds a pitch to a track
+addPitch :: TrackChangeRate -> TrackPitchDirection -> RacingTrack -> RacingTrack
+addPitch = addPitchCustom . Common
+
+-- | Adds a custom pitch to a track
+addPitchCustom
+    :: WithCustom TrackChangeRate Float
+    -> TrackPitchDirection
+    -> RacingTrack -> RacingTrack
+addPitchCustom pitch dir =
+    map (changeRoadLinePitchRate (trackPitchDir dir (fromCustom trackPitchValue pitch)))
 
 -- | Adds a hill to a track
-addHill :: TrackHill -> TrackHillDirection -> RacingTrack -> RacingTrack
-addHill hill = addHillCustom (Common hill) easeInOutSine
+addHill :: TrackHill -> TrackPitchDirection -> RacingTrack -> RacingTrack
+addHill = addHillCustom easeInOutSine . Common
 
 -- | Adds a custom hill to a track
 addHillCustom
-    :: WithCustom TrackHill Float
-    -> InterpolationFunc
-    -> TrackHillDirection
+    :: InterpolationFunc
+    -> WithCustom TrackHill Float
+    -> TrackPitchDirection
     -> RacingTrack -> RacingTrack
-addHillCustom hill interpolate dir track =
+addHillCustom interpolate hill dir track =
     let -- Get the hill length
         func x = trackHillDir dir (fromCustom trackHillHeight hill * interpolate x)
 
@@ -278,7 +324,7 @@ connectTracks track = (track ++) . shiftTrack (dy, dz)
         -- Getting the y coordinate of the last road line of the first track
         -- and lifting second track by this amount
         dy = case last track of
-            (RoadLine (ly, _) _ _) -> ly
+            (RoadLine (ly, _) _ _ _) -> ly
 
         dz = fromIntegral (length track) * roadSegmentLength
 
@@ -293,17 +339,17 @@ infRacingTrack track = connectTracks track (infRacingTrack track)
 ----------------------------------------------------------------
 
 handleGame :: Event -> GameState -> GameState
-handleGame ev (GameState cam (dy, dz) track) = case ev of
-    (EventKey (Char 'w') Down _ _) -> GameState cam (dy,  1) track
-    (EventKey (Char 'w') Up _ _)   -> GameState cam (dy,  0) track
-    (EventKey (Char 's') Down _ _) -> GameState cam (dy, -1) track
-    (EventKey (Char 's') Up _ _)   -> GameState cam (dy,  0) track
-    _ -> GameState cam (dy, dz) track
+handleGame ev (GameState cam (dy, dz) track playerPos) = case ev of
+    (EventKey (Char 'w') Down _ _) -> GameState cam (dy,  1) track playerPos
+    (EventKey (Char 'w') Up _ _)   -> GameState cam (dy,  0) track playerPos
+    (EventKey (Char 's') Down _ _) -> GameState cam (dy, -1) track playerPos
+    (EventKey (Char 's') Up _ _)   -> GameState cam (dy,  0) track playerPos
+    _ -> GameState cam (dy, dz) track playerPos
 
 updateGame :: Float -> GameState -> GameState
-updateGame dt (GameState cam delta track) = newState
+updateGame dt (GameState cam delta track playerPos) = newState
     where
-        (_, ddz) = delta
+        (ddx, ddz) = delta
         (_, cy, cz) = cameraPosition cam
 
         updatedTrack = dropWhile ((< cz) . snd . roadLinePosition) track
@@ -316,7 +362,9 @@ updateGame dt (GameState cam delta track) = newState
 
         ddy = (cameraHeight + ly) - cy
 
-        newState = GameState (shiftCamera (0, ddy * 0.5, ddz * 100) cam) delta updatedTrack
+        newState = GameState (
+            shiftCamera (0, ddy * 0.5, ddz * 100) cam
+            ) delta updatedTrack playerPos
 
 gameWindow :: Display
 gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
@@ -324,5 +372,5 @@ gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
 main :: IO ()
 main = play gameWindow white 60 initState drawGame handleGame updateGame
     where
-        initState = GameState initCamera (0, 0) (infRacingTrack sampleTrack)
-        initCamera = Camera (0, cameraHeight, 0) (1024, 768) 0.85 100
+        initState = GameState initCamera (0, 0) (infRacingTrack sampleTrack) (0, 0)
+        initCamera = Camera (0, cameraHeight, 0) (1024, 768) 0.5 100
