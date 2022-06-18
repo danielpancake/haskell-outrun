@@ -2,6 +2,7 @@ module Main where
 
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Game
+import qualified Data.Maybe
 
 cameraHeight      = 1500
 roadSegmentLength = 200
@@ -16,23 +17,26 @@ fromCustom func val = case val of
 
 type Position = (Float, Float, Float)
 
+shiftPosition :: Position -> Position -> Position
+shiftPosition (x, y, z) (x', y', z') = (x + x', y + y', z + z')
+
 data Camera = Camera
     { cameraPosition       :: Position   -- Position in world space
     , cameraResolution     :: (Int, Int) -- Screen resolution
     , cameraDepth          :: Float      -- Camera depth. Basically, has
         -- an inversely proportional relation to FOV. Should increase while
         -- moving up, decrease while moving down
-    , cameraRenderDistance :: Int        -- Render distance
+    , cameraRenderDistance :: Int   -- Render distance
+    , cameraSmoothness     :: Float -- How fast camera moves towards target position
     }
 
 changeRenderDistance :: Int -> Camera -> Camera
 changeRenderDistance renderDist cam = cam { cameraRenderDistance = renderDist }
 
 shiftCamera :: Position -> Camera -> Camera
-shiftCamera (x2, y2, z2) cam = cam { cameraPosition = newPos }
+shiftCamera delta cam = cam { cameraPosition = newPos }
     where
-        (x1, y1, z1) = cameraPosition cam
-        newPos = (x1 + x2, y1 + y2, z1 + z2)
+        newPos = shiftPosition (cameraPosition cam) delta
 
 data RoadLine = RoadLine
     { roadLinePosition  :: (Float, Float) -- (y, z) coordinates of the line
@@ -43,6 +47,12 @@ data RoadLine = RoadLine
     , roadLinePitchRate :: Float -- Pitch rate
     , roadLineColor     :: Color -- Color of the road segment
     }
+
+roadLineNthMaybe :: (RoadLine -> a) -> Int -> [RoadLine] -> Maybe a
+roadLineNthMaybe get offset track =
+    case drop offset track of
+        (r : _) -> Just (get r)
+        _ -> Nothing
 
 changeRoadLineCurveRate :: Float -> RoadLine -> RoadLine
 changeRoadLineCurveRate curve roadLine = roadLine { roadLineCurveRate = curve }
@@ -105,11 +115,25 @@ trackHillDir dir = case dir of
 
 type RacingTrack = [RoadLine]
 
+data Player = Player
+    { playerPosition :: Position       -- Player position
+    , playerVelocity :: (Float, Float) -- Player speed vector
+    , playerGravityFactor :: Float     -- Gravity factor
+    }
+
+shiftPlayer :: Position -> Player -> Player
+shiftPlayer delta player = player { playerPosition = newPos }
+    where
+        newPos = shiftPosition (playerPosition player) delta
+
+changePlayerVelocity :: (Float, Float) -> Player -> Player
+changePlayerVelocity vec player = player { playerVelocity = vec }
+
 data GameState = GameState
     Camera
-    (Float, Float) -- Movement vector
+    (Float, Float) -- Movement vector (x, z)
     RacingTrack
-    (Float, Float) -- Position of the car
+    Player
 
 ---- | Interpolation functions |--------------------------------
 
@@ -160,54 +184,69 @@ drawTrack = drawTrack' (0, 0, 0, 0)
     where
         drawTrack' _ _ [] = blank     -- Cannot draw a segment from an empty list
         drawTrack' _ _ [line] = blank -- Cannot draw a segment from a single line ¯\_(ツ)_/¯
-        drawTrack' _ (Camera _ _ _ 0) _ = blank -- Zero render distance
+        drawTrack' delta cam track =
+            case cameraRenderDistance cam of
+                0 -> blank -- Zero render distance
+                _ -> let
+                    (x, dx, y, dy) = delta
+                    (line1 : lines) = track
 
-        drawTrack' (x, dx, y, dy) cam (line1 : lines) =
-            drawTrack' (x', dx', y', dy') cam' lines <> segment
-            where
-                RoadLine (ly, lz) curve pitch col = line1
+                    RoadLine (_, lz) curve pitch col = line1
 
-                y'  = y + dy
-                dy' = dy + pitch
+                    y'  = y + dy
+                    dy' = dy + pitch
 
-                ((x1, y1), w1) = project cam (shiftRoadLine (y,  0) line1)
-                (line2 : _ ) = lines
-                ((x2, y2), w2) = project cam (shiftRoadLine (y', 0) line2)
+                    (ly1, lz1) = roadLinePosition (shiftRoadLine (y,  0) line1)
+                    ((x1, y1), w1) = project cam (0, ly1, lz1) roadSegmentWidth
 
-                rendDist = cameraRenderDistance cam
-                cam' = changeRenderDistance (rendDist - 1) cam
+                    (line2 : _ ) = lines
+                    (ly2, lz2) = roadLinePosition (shiftRoadLine (y', 0) line2)
+                    ((x2, y2), w2) = project cam (0, ly2, lz2) roadSegmentWidth
 
-                (_, _, cz) = cameraPosition cam
+                    rendDist = cameraRenderDistance cam
+                    cam' = changeRenderDistance (rendDist - 1) cam
 
-                x'  = x + dx
-                dx' = dx + curve
+                    (_, _, cz) = cameraPosition cam
 
-                segment = if cz <= lz
-                    then drawRoadSegment col (x1 + x, y1) w1 (x2 + x', y2) w2
-                    else blank
+                    x'  = x + dx
+                    dx' = dx + curve
 
-project :: Camera -> RoadLine
+                    segment = if cz <= lz
+                        then drawRoadSegment col (x1 + x, y1) w1 (x2 + x', y2) w2
+                        else blank
+
+                    in drawTrack' (x', dx', y', dy') cam' lines <> segment
+
+project
+    :: Camera
+    -> (Float, Float, Float) -- Position of the projected object
+    -> Float                 -- Width of the projected object
     -> (Point, Float) -- On screen coordinates and
                       -- projected width of the road line
-project (Camera (cx, cy, cz) (width, height) depth _) roadLine =
-    (screenPos, w)
+project cam (lx, ly, lz) width = (screenPos, width')
     where
-        RoadLine (ly, lz) _ _ _ = roadLine
+        (cx, cy, cz) = cameraPosition cam
+        (viewWidth, viewheight) = cameraResolution cam
+        depth = cameraDepth cam
 
-        halfWidth = fromIntegral width / 2
-        halfHeight = fromIntegral height / 2
+        halfWidth = fromIntegral viewWidth / 2
+        halfHeight = fromIntegral viewheight / 2
 
         -- Project the road line onto the screen
         scale = depth / (lz - cz)
-        sx = (1 + scale * negate cx) * halfWidth
+        sx = (1 + scale * (lx - cx)) * halfWidth
         sy = (1 + scale * (ly - cy)) * halfHeight
-        w = scale * roadSegmentWidth * halfWidth
+        width' = scale * width * halfWidth
 
         -- Translate coordinates to the bottom center of the screen
         screenPos = (sx - halfWidth, sy - halfHeight)
 
 drawGame :: GameState -> Picture
-drawGame (GameState cam _ track playerPos) = drawTrack cam track
+drawGame (GameState cam _ track player) =
+    drawTrack cam track <> drawnPlayer
+    where
+        ((x, y), w) = project cam (playerPosition player) 500
+        drawnPlayer = drawRoadSegment black (x, y) w (x, y + w * 2) w
 
 ----------------------------------------------------------------
 
@@ -226,12 +265,12 @@ sampleTrack = connectTracksMany
     [
         addCurve Gently TurningLeft (makeTrack ShortTrack [green, dark green]),
         addCurve Steeply TurningRight (
-            addHill LargeHill GoingUp (makeTrack ShortTrack [red, dark red])
+            addPitch Steeply GoingUp (makeTrack ShortTrack [red, dark red])
         ),
         addCurve Steeply TurningLeft(
-            addHill LargeHill GoingDown (makeTrack ShortTrack [green, dark green])
+            addPitch Steeply GoingDown (makeTrack ShortTrack [green, dark green])
         ),
-        addHill LargeHill GoingDown (makeTrack ShortTrack [green, dark green])
+        addPitch Steeply GoingDown (makeTrack ShortTrack [green, dark green])
     ]
 
 -- | Example of the track generated by hand
@@ -338,33 +377,64 @@ infRacingTrack track = connectTracks track (infRacingTrack track)
 
 ----------------------------------------------------------------
 
+playerMovement :: Event -> (Float, Float) -> (Float, Float)
+playerMovement ev (dy, dz) = case ev of
+    (EventKey (Char 'w') Down _ _) -> (dy, 1)
+    (EventKey (Char 'w') Up _ _)   -> (dy, 0)
+
+    (EventKey (Char 's') Down _ _) -> (dy, 0)
+    (EventKey (Char 's') Up _ _)   -> (dy, 0)
+
+    (EventKey (Char 'a') Down _ _) -> (-1, dz)
+    (EventKey (Char 'a') Up _ _)   -> (0,  dz)
+
+    (EventKey (Char 'd') Down _ _) -> (1, dz)
+    (EventKey (Char 'd') Up _ _)   -> (0, dz)
+
+    _ -> (dy, dz)
+
 handleGame :: Event -> GameState -> GameState
-handleGame ev (GameState cam (dy, dz) track playerPos) = case ev of
-    (EventKey (Char 'w') Down _ _) -> GameState cam (dy,  1) track playerPos
-    (EventKey (Char 'w') Up _ _)   -> GameState cam (dy,  0) track playerPos
-    (EventKey (Char 's') Down _ _) -> GameState cam (dy, -1) track playerPos
-    (EventKey (Char 's') Up _ _)   -> GameState cam (dy,  0) track playerPos
-    _ -> GameState cam (dy, dz) track playerPos
+handleGame ev (GameState cam keys track playerPos) =
+    GameState cam (playerMovement ev keys) track playerPos
 
 updateGame :: Float -> GameState -> GameState
-updateGame dt (GameState cam delta track playerPos) = newState
+updateGame dt (GameState cam keys track player) = newState
     where
-        (ddx, ddz) = delta
         (_, cy, cz) = cameraPosition cam
+        (px, py, pz) = playerPosition player
 
+        -- Drop road lines behind the camera
         updatedTrack = dropWhile ((< cz) . snd . roadLinePosition) track
 
-        -- Get y offset of the road line which is approx. under the camera
-        ly = case drop offset updatedTrack of
-            (r : _) -> fst (roadLinePosition r)
-            _ -> 0
-            where offset = 4
+        -- Get coordinates of the nth road line ahead
+        nthPosition offset = Data.Maybe.fromMaybe (0, 0)
+            (roadLineNthMaybe roadLinePosition offset updatedTrack)
+        (ly1, _) = nthPosition 4 -- For the camera height
+        (ly2, _) = nthPosition  4 -- For the player position
 
-        ddy = (cameraHeight + ly) - cy
+        smoothness = cameraSmoothness cam
 
-        newState = GameState (
-            shiftCamera (0, ddy * 0.5, ddz * 100) cam
-            ) delta updatedTrack playerPos
+        -- Camera height difference
+        camDY = (cameraHeight + ly1 - cy) * smoothness
+        -- Camera position difference (relative to the player)
+        camDZ = (pz - cz - 1000) * smoothness
+        shiftedCam = shiftCamera (0, camDY, camDZ) cam
+
+        -- Player height difference
+        plrDY = (ly2 - py) * playerGravityFactor player
+
+        nthCurve offset = Data.Maybe.fromMaybe 0
+            (roadLineNthMaybe roadLineCurveRate offset updatedTrack)
+
+        curveEffect = 2 * pSpdZ * nthCurve 4
+
+        (vx, vz) = keys
+        (pSpdX, pSpdZ) = playerVelocity player
+        newVelocity = (approach pSpdX vx 0.3, approach pSpdZ vz 0.05)
+
+        move = shiftPlayer ((pSpdX - curveEffect) * 40, plrDY, pSpdZ * 350) . changePlayerVelocity newVelocity
+
+        newState = GameState shiftedCam keys updatedTrack (move player)
 
 gameWindow :: Display
 gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
@@ -372,5 +442,7 @@ gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
 main :: IO ()
 main = play gameWindow white 60 initState drawGame handleGame updateGame
     where
-        initState = GameState initCamera (0, 0) (infRacingTrack sampleTrack) (0, 0)
-        initCamera = Camera (0, cameraHeight, 0) (1024, 768) 0.5 100
+        initState = GameState initCamera (0, 0) (infRacingTrack sampleTrack) initPlayer
+
+        initCamera = Camera (0, cameraHeight, 0) (1024, 768) 0.3 100 0.75
+        initPlayer = Player (0, 0, 0) (0, 0) 1
