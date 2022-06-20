@@ -2,7 +2,9 @@ module Main where
 
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Game
+
 import qualified Data.Maybe
+import qualified Data.Bifunctor
 
 cameraHeight      = 1500
 roadSegmentLength = 200
@@ -16,6 +18,9 @@ fromCustom func val = case val of
     Custom custom -> custom
 
 type Position = (Float, Float, Float)
+
+shiftPoint :: Point -> Point -> Point
+shiftPoint (x, y) (x', y') = (x + x', y + y')
 
 shiftPosition :: Position -> Position -> Position
 shiftPosition (x, y, z) (x', y', z') = (x + x', y + y', z + z')
@@ -117,6 +122,7 @@ type RacingTrack = [RoadLine]
 
 data RoadObject = RoadObject
     { roadObjectPosition :: Position
+    , roadObjectVelocity :: (Float, Float)
     , roadObjectColor    :: Color
     }
 
@@ -125,26 +131,36 @@ shiftRoadObject delta obj = obj { roadObjectPosition = newPos }
     where
         newPos = shiftPosition (roadObjectPosition obj) delta
 
-data Player = Player
-    { playerPosition :: Position
-    , playerVelocity :: (Float, Float)
-    , playerColor    :: Color
-    }
+getRoadObjectZ :: RoadObject -> Float
+getRoadObjectZ obj = oz
+    where (_, _, oz) = roadObjectPosition obj
+
+type Player = RoadObject
+
+playerPosition :: Player -> Position
+playerPosition = roadObjectPosition
+
+playerVelocity :: Player -> (Float, Float)
+playerVelocity = roadObjectVelocity
+
+playerColor :: Player -> Color
+playerColor = roadObjectColor
 
 shiftPlayer :: Position -> Player -> Player
-shiftPlayer delta player = player { playerPosition = newPos }
+shiftPlayer delta player = player { roadObjectPosition = newPos }
     where
         newPos = shiftPosition (playerPosition player) delta
 
 changePlayerVelocity :: (Float, Float) -> Player -> Player
-changePlayerVelocity vec player = player { playerVelocity = vec }
+changePlayerVelocity vec player = player { roadObjectVelocity = vec }
 
 data GameState = GameState
-    Camera
-    (Float, Float) -- Movement vector (x, z)
-    RacingTrack
-    [RoadObject]
-    Player
+    { gameCamera      :: Camera
+    , gameMovement    :: (Float, Float)
+    , gameRacingTrack :: RacingTrack
+    , gameObjects     :: [RoadObject]
+    , gamePlayer      :: Player
+    }
 
 ---- | Interpolation functions |--------------------------------
 
@@ -177,12 +193,10 @@ easeOutQuint x = 1 - ((1 - x) ** 5)
 -- Draws a road segment
 drawRoadSegment
     :: Color -- Color of the road segment
-    -> Point -- Bottom point of the road segment
-    -> Float -- Width of the bottom road segment
-    -> Point -- Top point of the road segment
-    -> Float -- Width of the top road segment
+    -> (Point, Float) -- Bottom point of the road segment and its width
+    -> (Point, Float) -- Top point of the road segment and its width
     -> Picture
-drawRoadSegment col (x1, y1) w1 (x2, y2) w2 =
+drawRoadSegment col ((x1, y1), w1) ((x2, y2), w2) =
     color col (polygon points)
     where
         points = [
@@ -190,67 +204,108 @@ drawRoadSegment col (x1, y1) w1 (x2, y2) w2 =
             (x2 + w2, y2), (x2 - w2, y2)
             ]
 
+-- Draws a road segment with a scale factor
+drawRoadSegmentScaled
+    :: Float -- Scale factor
+    -> Color -- Color of the road segment
+    -> (Point, Float) -- Bottom point of the road segment and its width
+    -> (Point, Float) -- Top point of the road segment and its width
+    -> Picture
+drawRoadSegmentScaled scale col (p1, w1) (p2, w2) =
+    drawRoadSegment col (p1, w1 * scale) (p2, w2 * scale)
+
 drawObject :: Camera -> RoadObject -> Picture
 drawObject cam obj =
     drawRoadSegment (roadObjectColor obj)
-    (x, y)  (w * 200)
-    (x, y + (w * 400)) (w * 200)
+    ((x, y),             w * 200)
+    ((x, y + (w * 400)), w * 200)
     where
         ((x, y), w) = project cam (roadObjectPosition obj)
 
-drawTrack :: Camera -> [RoadObject] -> RacingTrack -> Picture
-drawTrack = drawTrack' (0, 0, 0, 0)
+drawRacingTrack :: GameState -> Picture
+drawRacingTrack = drawRacingTrack' (0, 0, 0, 0) -- accounting for changes in curve and pitch values
     where
-        drawTrack' _ _ _ [] = blank     -- Cannot draw a segment from an empty list
-        drawTrack' _ _ _ [line] = blank -- Cannot draw a segment from a single line ¯\_(ツ)_/¯
+        drawRacingTrack' (x, dx, y, dy) gamestate =
+            case track of
+                []     -> blank -- Cannot draw a segment from an empty list
+                [line] -> blank -- Cannot draw a segment from a single line ¯\_(ツ)_/¯
 
-        drawTrack' (x, dx, y, dy) cam objects (line : nextLine : rest) =
-            case cameraRenderDistance cam of
-                0 -> blank -- Zero render distance
-                _ -> let
+                _ -> case cameraRenderDistance cam of
+                    0 -> blank -- Zero render distance
+                    _ -> let
+                        -- Split the track into segments
+                        (line : nextLine : rest) = track
 
-                    RoadLine (_, _) curve pitch col = line
+                        -- Applying change in curve and pitch values
+                        x'  = x + dx
+                        dx' = dx + roadLineCurveRate line
 
-                    y'  = y + dy
-                    x'  = x + dx
-                    dx' = dx + curve
-                    dy' = dy + pitch
+                        y'  = y + dy
+                        dy' = dy + roadLinePitchRate line
 
-                    (ly1, lz1) = roadLinePosition (shiftRoadLine (y,  0) line)
-                    ((x1, y1), w1) = project cam (0, ly1, lz1)
+                        -- Projecting road lines
+                        (ly1, lz1) = roadLinePosition (shiftRoadLine (y,  0) line)
+                        prj1 = Data.Bifunctor.first (shiftPoint (x, 0)) prj
+                            where prj = project cam (0, ly1, lz1)
 
-                    (ly2, lz2) = roadLinePosition (shiftRoadLine (y', 0) nextLine)
-                    ((x2, y2), w2) = project cam (0, ly2, lz2)
+                        (ly2, lz2) = roadLinePosition (shiftRoadLine (y', 0) nextLine)
+                        prj2 = Data.Bifunctor.first (shiftPoint (x', 0)) prj
+                            where prj = project cam (0, ly2, lz2)
 
-                    rendDist = cameraRenderDistance cam
-                    cam' = changeRenderDistance (rendDist - 1) cam
+                        -- Reducing number of road lines to render
+                        cam' = changeRenderDistance (rendDist - 1) cam
+                        rendDist = cameraRenderDistance cam
 
-                    (_, _, cz) = cameraPosition cam
+                        -- Drawing the terrain under the road segment
+                        -- terrainSegment = case terrainDrawer of
+                        --     Nothing -> blank
+                        --     Just f  -> f rendDist prj1 prj2
+                        terrainSegment =
+                            drawRoadSegment (if even rendDist then black else white)
+                                ((x1, -1000), scl1 * roadSegmentWidth * 3)
+                                ((x2,    y2), scl2 * roadSegmentWidth * 3)
+                                where
+                                    ((x1, y1), scl1) = prj1
+                                    ((x2, y2), scl2) = prj2
 
-                    -- This is really messy now
-                    roadSegment =
-                        if cz <= lz1
-                        then drawRoadSegment col
-                            (x1 + x,  y1) (w1 * roadSegmentWidth)
-                            (x2 + x', y2) (w2 * roadSegmentWidth)
-                        else blank
+                        -- Drawing the road segment
+                        roadSegment =
+                            drawRoadSegmentScaled roadSegmentWidth (roadLineColor line) prj1 prj2
 
-                    getRoadObjectZ obj = oz
-                        where (_, _, oz) = roadObjectPosition obj
+                        -- Drawing objects on the current segment
+                        (objsToDraw, restObjs) = span ((< lz2) . getRoadObjectZ) objects
 
-                    (objToDraw, restObj) = span ((<lz2) . getRoadObjectZ) (dropWhile ((<lz1) . getRoadObjectZ) objects)
+                        -- Draw objects
+                        drawnObjects = pictures
+                            (map (translate x 0 . drawObject cam . shiftRoadObject (0, y, 0)) objsToDraw)
 
-                    drawnObjects = pictures (map (translate x 0 . drawObject cam . shiftRoadObject (0, y, 0)) objToDraw)
+                        -- Changed game state
+                        changedState = GameState {
+                            gameCamera      = cam',
+                            gameMovement    = movement,
+                            gameRacingTrack = nextLine : rest,
+                            gameObjects     = restObjs,
+                            gamePlayer      = player
+                            }
 
-                    in drawTrack' (x', dx', y', dy') cam' restObj (nextLine : rest) <> roadSegment <> drawnObjects
+                        in drawRacingTrack' (x', dx', y', dy') changedState
+                            <> terrainSegment
+                            <> roadSegment
+                            <> drawnObjects
+            where
+                GameState cam movement track objects player = gamestate
 
 project
     :: Camera -- Camera to use for projection
     -> (Float, Float, Float) -- Position of the projected object
     -> (Point, Float) -- On screen coordinates and project scale factor
-project cam (lx, ly, lz) = (screenPos, scale * halfWidth)
+project cam (lx, ly, lz') = (screenPos, scale * halfWidth)
     where
         (cx, cy, cz) = cameraPosition cam
+
+        -- Snapping Z's behind the camera to the relative zero
+        lz = if lz' < cz then cz else lz'
+
         (viewWidth, viewheight) = cameraResolution cam
         depth = cameraDepth cam
 
@@ -266,12 +321,17 @@ project cam (lx, ly, lz) = (screenPos, scale * halfWidth)
         screenPos = (sx - halfWidth, sy - halfHeight)
 
 drawGame :: GameState -> Picture
-drawGame (GameState cam _ track roadObjs player) =
-    drawTrack cam roadObjs track <> drawnPlayer
+drawGame gamestate = drawRacingTrack gamestate'
     where
-        ((x, y), scale) = project cam (playerPosition player)
-        w = 500 * scale
-        drawnPlayer = drawRoadSegment black (x, y) w (x, y + w * 2) w
+        player = gamePlayer gamestate
+
+        -- Getting Z position of the player
+        (_, _, pz) = playerPosition player
+
+        -- Placing the player on the road
+        (behindPlayer, aheadPlayer) = span ((< pz) . getRoadObjectZ) (gameObjects gamestate)
+
+        gamestate' = gamestate { gameObjects = behindPlayer ++ player : aheadPlayer }
 
 ----------------------------------------------------------------
 
@@ -430,6 +490,7 @@ updateGame dt (GameState cam keys track roadObjs player) = newState
 
         -- Drop road lines behind the camera
         updatedTrack = dropWhile ((< cz) . snd . roadLinePosition) track
+        updatedObjs  = dropWhile ((< cz) . getRoadObjectZ) roadObjs
 
         -- Get coordinates of the nth road line ahead
         nthPosition offset = Data.Maybe.fromMaybe (0, 0)
@@ -453,7 +514,7 @@ updateGame dt (GameState cam keys track roadObjs player) = newState
         nthCurve offset = Data.Maybe.fromMaybe 0
             (roadLineNthMaybe roadLineCurveRate offset updatedTrack)
 
-        curveEffect = 5 * pSpdZ * nthCurve 4
+        curveEffect = pSpdZ * nthCurve 4
 
         (vx, vz) = keys
         (pSpdX, pSpdZ) = playerVelocity player
@@ -461,7 +522,7 @@ updateGame dt (GameState cam keys track roadObjs player) = newState
 
         move = shiftPlayer ((pSpdX - curveEffect) * 40, plrDY, pSpdZ * 350) . changePlayerVelocity newVelocity
 
-        newState = GameState shiftedCam keys updatedTrack roadObjs (move player)
+        newState = GameState shiftedCam keys updatedTrack updatedObjs (move player)
 
 gameWindow :: Display
 gameWindow = InWindow "Outrun - clone" (1024, 768) (0, 0)
@@ -470,11 +531,11 @@ outrun :: IO ()
 outrun = play gameWindow white 60 initState drawGame handleGame updateGame
     where
         initState = GameState initCamera (0, 0) (infRacingTrack sampleTrack)
-            [RoadObject (0, 0, 1000) yellow, RoadObject (0, 0, 2000) yellow, RoadObject (0, 0, 3000) yellow]
+            [RoadObject (0, 0, 1000) (0, 0) yellow, RoadObject (0, 0, 2000) (0, 0) yellow, RoadObject (0, 0, 3000) (0, 0) yellow]
             initPlayer
 
         initCamera = Camera (0, cameraHeight, 0) (1024, 768) 0.3 100 0.75
-        initPlayer = Player (0, 0, 0) (0, 0) black
+        initPlayer = RoadObject (0, 0, 0) (0, 0) black
 
 main :: IO ()
 main = outrun
