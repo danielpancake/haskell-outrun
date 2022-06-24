@@ -1,6 +1,6 @@
-# HaskellGame
+# haskell-outrun
 
-Do not edit `HaskellGame.cabal` by hand as it is being generated automatically from `package.yaml`
+Do not edit `haskell-outrun.cabal` by hand as it is being generated automatically from `package.yaml`
 
 ## Troubleshooting
 | Problem | Solution |

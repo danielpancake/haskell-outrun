@@ -1,6 +1,6 @@
-name:                HaskellGame
-version:             0.1.5.1
-github:              "danielpancake/HaskellGame"
+name:                haskell-outrun
+version:             0.2.0.1
+github:              "danielpancake/haskell-outrun"
 license:             BSD3
 author:              "danielpancake and Leon Parepko"
 maintainer:          "d.satarov@innopolis.university"
@@ -17,18 +17,20 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Outrun clone game made in Haskell
+description:         OutRun clone game made in Haskell
 
 dependencies:
 - base >= 4.7 && < 5
 - gloss
 - gloss-juicy
+- utility-ht
+- containers
 
 library:
   source-dirs: src
 
 executables:
-  HaskellGame-exe:
+  haskell-outrun:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -36,10 +38,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - HaskellGame
+    - haskell-outrun
 
 tests:
-  HaskellGame-test:
+  haskell-outrun-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -47,4 +49,4 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - HaskellGame
+    - haskell-outrun
