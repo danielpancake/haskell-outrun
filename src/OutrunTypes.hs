@@ -30,7 +30,7 @@ data Projected a = Projected
   }
 
 data RoadLine = RoadLine
-  { roadLineIndex     :: Int
+  { roadLineIndex     :: Int   -- Index of the 
   , roadLinePosition  :: Pos3D -- World position of the line
 
     -- Both curve and pitch values make the camera follow the movement,
@@ -42,7 +42,15 @@ data RoadLine = RoadLine
   , roadLineColor     :: Color -- Color of the road segment
   }
 
-defaultRoadSegmentLength = 200  :: Float
+setRoadLineIndex :: Int -> RoadLine -> RoadLine
+setRoadLineIndex i rl = rl { roadLineIndex = i }
+
+shiftRoadLineIndex :: Int -> RoadLine -> RoadLine
+shiftRoadLineIndex delta rl = setRoadLineIndex newIndex rl
+  where
+    newIndex = roadLineIndex rl + delta
+
+defaultRoadSegmentLength = 250  :: Float
 defaultRoadSegmentWidth  = 2000 :: Float
 
 shiftRoadLine :: Pos3D -> RoadLine -> RoadLine
@@ -56,6 +64,9 @@ type RacingTrack = [RoadLine]
 -- | Shifts the track by the given amount
 shiftTrack :: Pos3D -> RacingTrack -> RacingTrack
 shiftTrack delta = map (shiftRoadLine delta)
+
+shiftTrackIndices :: Int -> RacingTrack -> RacingTrack
+shiftTrackIndices delta = map (shiftRoadLineIndex delta)
 
 data Camera = Camera
   { cameraPosition       :: Pos3D      -- Position in world space

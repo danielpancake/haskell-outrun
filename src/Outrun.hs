@@ -123,14 +123,19 @@ projectRoadObject near far roadObject =
 
 ---- | Drawing Section |----------------------------------------
 
--- | Draws a road segment
-drawRoadSegment
-  :: Point -- Bottom point of the road segment
-  -> Float -- and its width
+type SegmentPic
+  =  Point -- Bottom point of the road segment
+  -> Float -- and half of its width
+           -- ('cause segment is drawn symmetrically)
   -> Point -- Top point of the road segment
-  -> Float -- and its width
+  -> Float -- and half of its width
   -> Color -- Color of the road segment
   -> Picture
+
+type IndexedSegmentPic = Int -> SegmentPic
+
+-- | Draws a road segment
+drawRoadSegment :: SegmentPic
 drawRoadSegment (x1, y1) w1 (x2, y2) w2 col =
   color col (polygon points)
   where
@@ -140,14 +145,7 @@ drawRoadSegment (x1, y1) w1 (x2, y2) w2 col =
       ]
 
 -- | Draws a road segment scaled
-drawRoadSegmentScaled
-  :: Float -- Scale factor
-  -> Point -- Bottom point of the road segment
-  -> Float -- and its width
-  -> Point -- Top point of the road segment
-  -> Float -- and its width
-  -> Color -- Color of the road segment
-  -> Picture
+drawRoadSegmentScaled :: Float -> SegmentPic
 drawRoadSegmentScaled scale p1 w1 p2 w2 =
   drawRoadSegment p1 (w1 * scale) p2 (w2 * scale)
 
@@ -171,62 +169,61 @@ drawProjectedObject (Projected obj point factor) =
 
 -- | Draws a road track
 drawRacingTrack
-  :: Camera       -- Camera to use for projection
-  -> [Color]      -- List of colors to use for the terrain
-  -> RacingTrack  -- The track to draw
-  -> [DynamicRoadObject]
+  -- How to draw:
+  :: Camera -- Camera to use for projection
+  -> [IndexedSegmentPic] -- List of segment drawer functions
+  -- with the index of the segment as first argument
+
+  -- What to draw:
+  -> RacingTrack         -- The track to draw
+  -> [DynamicRoadObject] -- List of road objects to draw
+
   -> Picture
-drawRacingTrack cam _ track roadObjs = let
+drawRacingTrack cam segmentDrawers track roadObjs =
+  pictures (mapAdjacent drawAllBetween trackProj)
+  where
+    trackProj = projectRoadLines cam track
 
-  trackProj = projectRoadLines cam track
+    getIndex = roadLineIndex . fromProjected
+    getCol   = roadLineColor . fromProjected
+    getPos   = roadLinePosition . fromProjected
+    getPoint = projectedPosition
+    getScale = projectedScale
+    getWidth = roadLineWidth . fromProjected
 
-  getIndex = roadLineIndex . fromProjected
-  getCol   = roadLineColor . fromProjected
-  getPos   = roadLinePosition . fromProjected
-  getPoint = projectedPosition
-  getScale = projectedScale
-  getWidth = roadLineWidth . fromProjected
+    objsBetween near far =
+      filter (\obj -> objZ obj `inRangeOf` (nearZ, farZ)) roadObjs
+      where
+        objZ = getZ . roadObjectPosition . roadObject
 
-  objsBetween near far =
-    filter (\obj -> objZ obj `inRangeOf` (nearZ, farZ)) roadObjs
-    where
-      objZ = (getZ . roadObjectPosition . roadObject)
+        nearZ = getZ (getPos near)
+        farZ  = getZ (getPos far)
 
-      nearZ = getZ (getPos near)
-      farZ  = getZ (getPos far)
+    -- | Road list starts with the farthest segments,
+    --   since Painter's algorithm  is applied
+    drawAllBetween far near = roadSegment <> drawnRoadObjects
+      where
+        nearP = getPoint near
+        farP  = getPoint far
 
-  -- | Road list starts with the farthest segments, since Painter Method is applied
-  drawAllBetween far near = terrain <> roadSegment <> drawnRoadObjects
-    where
-      nearP = getPoint near
-      farP  = getPoint far
+        nearW = getWidth near * getScale near
+        farW  = getWidth far * getScale far
 
-      nearW = getWidth near * getScale near
-      farW  = getWidth far * getScale far
+        color = getCol near
+        index = getIndex near
 
-      col   = getCol near
-      ind   = getIndex near
+        -- Drawing road segment between two road lines (could include terrain segement)
+        roadSegment =
+          foldr ((<>) . ($color) . ($farW) . ($farP) . ($nearW) . ($nearP) . ($index))
+            -- do not know how to make this look better for now
+            blank
+            segmentDrawers
 
-      -- Drawing terrain segment between two road lines
-      terrain =
-        drawTerrainSegment nearP farP (
-          if even ind then dark green else green
-          )
-
-      -- Drawing road segment between two road lines
-      roadSegment =
-        drawRoadSegmentScaled 1.2 nearP nearW farP farW white
-        <>
-        drawRoadSegment nearP nearW farP farW col
-
-      -- Drawing road objects between two road lines
-      drawnRoadObjects = pictures $
-        map
-          (
-            (drawProjectedObject . projectRoadObject near far) . roadObject
-          ) (objsBetween near far)
-
-  in pictures (mapAdjacent drawAllBetween trackProj)
+        -- Drawing road objects between two road lines
+        drawnRoadObjects = pictures $
+          map
+            ((drawProjectedObject . projectRoadObject near far) . roadObject)
+            (objsBetween near far)
 
 ----------------------------------------------------------------
 
@@ -242,24 +239,24 @@ makeTrackCustom
   :: WithCustom TrackLength Int
   -> [Color]
   -> RacingTrack
-makeTrackCustom trackLength colArr = take length (infRacingTrack track)
+makeTrackCustom trackLength cols = take len (infRacingTrack track)
   where
-    colors = case colArr of
+    colors = case cols of
       [] -> [green, dark green]
-      _  -> colArr
+      _  -> cols
 
-    length = fromCustom trackLengthValue trackLength
+    len = fromCustom trackLengthValue trackLength
 
     track = foldr
       (connectTracks
-      . (:[])
+      . singleton
       . RoadLine 0 (0, 0, 0) 0 0 defaultRoadSegmentWidth
       ) [] colors
 
 -- | Connects two tracks together
 connectTracks :: RacingTrack -> RacingTrack -> RacingTrack
 connectTracks track =
-  (track ++) . shiftTrack (0, dy, dz)
+  (track ++) . shiftTrack (0, dy, dz) . shiftTrackIndices len
   where
     len = length track
 
@@ -274,6 +271,10 @@ connectTracks track =
 -- | Concatenates a list of tracks together
 connectTracksMany :: [RacingTrack] -> RacingTrack
 connectTracksMany = foldr connectTracks []
+
+-- | Returns indexed track
+indexedTrack :: RacingTrack -> RacingTrack
+indexedTrack = (<*> [0..]) . map (flip setRoadLineIndex)
 
 -- | Generates infinite racing track from the given one
 infRacingTrack :: RacingTrack -> RacingTrack
@@ -338,19 +339,35 @@ updateGame dt state = updatedGameState
     iRight = checkPressed 'd'
     iLeft  = checkPressed 'a'
 
-    GameState pressedkeys cam track (Dynamic player _) = state
-    (cx, cy, cz) = cameraPosition cam
-    (px,  _, pz) = roadObjectPosition player
+    GameState pressedkeys cam track (Dynamic player (spdX, spdZ)) = state
 
-    (aboba : _) = dropWhile ((< pz) . getZ . roadLinePosition) track
-    curveRate = roadLineCurveRate aboba
+    (cx, cy, cz) = cameraPosition cam
+    (px, __, pz) = roadObjectPosition player
+
+    -- Shows whether the player is on the track or not
+    isOnTrack = (defaultRoadSegmentWidth - abs px) >= 0
+
+    -- Getting road line nearest to the player from behind
+    (playerRL : _) = dropWhile ((< pz) . getZ . roadLinePosition) track
+
+    curveRate = roadLineCurveRate playerRL
+    pitchRate = roadLinePitchRate playerRL
 
     -- Get x- and z-direcred movement scalar
-    ddx = fromIntegral (iRight - iLeft) - curveRate * ddz
-    ddz = fromIntegral (iUp - iDown)
+    acc         = 0.0025
+    centrifugal = 0.3
+    maxZSpeed   = if isOnTrack then 320 else 100
+    maxXSpeed   = 200
+
+    ddx = maxXSpeed * fromIntegral (iRight - iLeft)
+    ddz = maxZSpeed * fromIntegral (iUp - iDown)
+
+    spdX' = approach spdX ddx 20 - ddz * curveRate * centrifugal
+    spdZ' = max 0 (approachSmooth spdZ ddz acc - pitchRate / 100)
+    --      ^^^ prohibits player from going backwards
 
     -- Update player position
-    updatedPlayer = shiftRoadObject (ddx * 100, 0, ddz * 100) player
+    updatedPlayer = shiftRoadObject (spdX', 0, spdZ') player
 
     -- Update camera position
     cameraSmoothness = 0.5
@@ -367,7 +384,7 @@ updateGame dt state = updatedGameState
     updatedGameState = state
       { gameRacingTrack = updatedTrack
       , gameCamera      = updatedCamera
-      , gamePlayer      = Dynamic updatedPlayer (0, 0)
+      , gamePlayer      = Dynamic updatedPlayer (spdX', spdZ')
       }
 
 ----------------------------------------------------------------
@@ -380,15 +397,13 @@ sampleTrack = connectTracksMany
   [
     makeTrack ShortTrack cols,
     addPitch Moderately GoingUp (makeTrack ShortTrack cols),
-    addPitch Moderately GoingDown (makeTrack ShortTrack cols),
-    makeTrack ShortTrack cols,
-    addCurve Moderately TurningLeft (makeTrack ShortTrack cols),
-    addCurve Moderately TurningRight (makeTrack ShortTrack cols),
-    addCurve Steeply TurningRight (makeTrack ShortTrack cols),
+    addPitch Steeply GoingDown (makeTrack LongTrack cols),
     makeTrack ShortTrack cols
   ]
   where
-    cols = [makeColor8 90 80 80 255, makeColor8 85 70 70 255]
+    cols = [makeColor8 90 80 80 255, makeColor8 90 80 80 255,
+            makeColor8 85 70 70 255, makeColor8 85 70 70 255]
+
 
 outrunDisplayTest :: RacingTrack -> IO ()
 outrunDisplayTest track =
@@ -397,6 +412,7 @@ outrunDisplayTest track =
     cam    = Camera (0, 1500, 0) (1024, 768) 0.3 100 0.75
     window = InWindow "Debug -- sample track" (1024, 768) (0, 0)
 
+
 outrunPlayTest :: RacingTrack -> IO ()
 outrunPlayTest track =
   play window white 60 initState drawGame handleInput updateGame
@@ -404,13 +420,32 @@ outrunPlayTest track =
     cam    = Camera (0, 1000, 0) (1024, 768) 0.4 200 0.75
     window = InWindow "Debug -- sample track ride" (1024, 768) (0, 0)
 
+    initState = GameState [] cam (infRacingTrack track) player
+
     playerPic = translate 0 500 $ color red $ circle 500
     player = Dynamic (RoadObject (0, 0, 1500) playerPic) (0, 0)
 
-    initState = GameState [] cam (infRacingTrack track) player
+    terrainPic index nearP nearW farP farW col =
+      drawTerrainSegment nearP farP (
+        if even index then dark green else green
+      )
+
+    roadSegment index nearP nearW farP farW col =
+      drawRoadSegmentScaled 1.2 nearP nearW farP farW
+          (
+            if (index `mod` 8) `inRangeOf` (0, 3)
+              then white
+              else red
+          )
+      <>
+      drawRoadSegment nearP nearW farP farW col
+      <>
+      if (index `mod` 16) `inRangeOf` (0, 8)
+        then drawRoadSegmentScaled 0.05 nearP nearW farP farW white
+        else blank
 
     drawGame :: OutrunGameState -> Picture
     drawGame (GameState _ cam track player) =
-      drawRacingTrack cam
-      [makeColor8 0 228 54 1, makeColor8 0 135 81 255]
-      track [player]
+      drawRacingTrack cam [terrainPic, roadSegment] track [player]
+      <>
+      text (show (roadObjectVelocity player))

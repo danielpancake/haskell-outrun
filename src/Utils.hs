@@ -14,6 +14,9 @@ lastMaybe list = Just (last list)
 inRangeOf :: Ord a => a -> (a, a) -> Bool
 inRangeOf val (from, to) = (from <= val) && (val <= to)
 
+clamp :: Ord a => a -> a -> a -> a
+clamp mn mx = max mn . min mx
+
 ---- | Interpolation functions |--------------------------------
 
 -- | Approaches the target value with the given speed
@@ -22,6 +25,20 @@ approach current target speed =
   if current < target
     then min (current + speed) target
     else max (current - speed) target
+
+-- | Non-linear approach function
+approachSmooth :: Float -> Float -> Float -> Float
+approachSmooth current target smoothness = result
+  where
+    eps = 1
+    val = current + (target - current) * smoothness
+
+    result =
+      if (val <= target && val + eps >= target) ||
+         (val >= target && val - eps <= target)
+        then target
+        else val
+
 
 ---- | All interpolation functions below (typed InterpolationFunc)
 ---- | take a value between 0 and 1

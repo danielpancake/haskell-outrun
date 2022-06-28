@@ -6,4 +6,3 @@ import           OutrunTypes
 
 main :: IO ()
 main = outrunPlayTest sampleTrack
-
