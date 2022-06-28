@@ -87,22 +87,36 @@ projectRoadObject near far roadObject =
   where
     getPosRL = roadLinePosition . fromProjected
 
-    objZ  = getZ (roadObjectPosition roadObject)
+    -- Getting the position of the road object
+    (objX, _, objZ) = roadObjectPosition roadObject
+
+    -- Getting the position of the two nearest road lines
+    -- ahead and behind the road object
+    (nearX, nearY) = projectedPosition near
+    (farX,  farY)  = projectedPosition far
+
     nearZ = getZ (getPosRL near)
     farZ  = getZ (getPosRL far)
 
+    -- Calculating the projection ratio
+    -- It shows how far the road object is from
+    -- the nearest road line behind it (near)
+    -- 0 - object is on the near road line
+    -- 1 - object is on the far road line
     projRatio = (objZ - nearZ) / (farZ - nearZ)
-
-    (nearX, nearY) = projectedPosition near
-    (farX,  farY)  = projectedPosition far
 
     nearScale = projectedScale near
     farScale  = projectedScale far
 
-    projPoint = (nearX + projRatio * (farX - nearX),
-                 nearY + projRatio * (farY - nearY))
-
+    -- Interpolating the scale of the road object
+    -- based on the projection ratio
     scale = nearScale + (farScale - nearScale) * projRatio
+
+    -- Point on the screen where the road object is
+    projPoint = (
+        nearX + projRatio * (farX - nearX) + objX * scale,
+        nearY + projRatio * (farY - nearY)
+      )
 
 ----------------------------------------------------------------
 
@@ -181,7 +195,7 @@ drawRacingTrack cam _ track roadObjs = let
       nearZ = getZ (getPos near)
       farZ  = getZ (getPos far)
 
-  -- | Since Painter Method is applied, road list starts with the farthest segments
+  -- | Road list starts with the farthest segments, since Painter Method is applied
   drawAllBetween far near = terrain <> roadSegment <> drawnRoadObjects
     where
       nearP = getPoint near
@@ -207,8 +221,9 @@ drawRacingTrack cam _ track roadObjs = let
 
       -- Drawing road objects between two road lines
       drawnRoadObjects = pictures $
-        map (
-          (drawProjectedObject . projectRoadObject near far) . roadObject
+        map
+          (
+            (drawProjectedObject . projectRoadObject near far) . roadObject
           ) (objsBetween near far)
 
   in pictures (mapAdjacent drawAllBetween trackProj)
@@ -314,15 +329,37 @@ handleInput ev state = case ev of
 updateGame :: Float -> OutrunGameState -> OutrunGameState
 updateGame dt state = updatedGameState
   where
-    GameState pressedkeys cam track (Dynamic player _) = state
-    (_, cy, cz) = cameraPosition cam
+    -- Returns numerical value of the key pressed
+    -- If given key is pressed, returns 1, otherwise 0
+    checkPressed x = fromEnum (Char x `elem` pressedkeys)
 
-    ddz = fromIntegral
-      (fromEnum (Char 'w' `elem` pressedkeys) - fromEnum (Char 's' `elem` pressedkeys))
+    iUp    = checkPressed 'w'
+    iDown  = checkPressed 's'
+    iRight = checkPressed 'd'
+    iLeft  = checkPressed 'a'
+
+    GameState pressedkeys cam track (Dynamic player _) = state
+    (cx, cy, cz) = cameraPosition cam
+    (px,  _, pz) = roadObjectPosition player
+
+    (aboba : _) = dropWhile ((< pz) . getZ . roadLinePosition) track
+    curveRate = roadLineCurveRate aboba
+
+    -- Get x- and z-direcred movement scalar
+    ddx = fromIntegral (iRight - iLeft) - curveRate * ddz
+    ddz = fromIntegral (iUp - iDown)
+
+    -- Update player position
+    updatedPlayer = shiftRoadObject (ddx * 100, 0, ddz * 100) player
 
     -- Update camera position
-    updatedCamera = shiftCamera (0, 0, ddz * 100) cam
-    updatedPlayer = shiftRoadObject (0, 0, ddz * 100) player
+    cameraSmoothness = 0.5
+    cameraZOffset = 1000
+
+    cdx = (px - cx) * cameraSmoothness
+    cdz = (pz - cameraZOffset - cz) * cameraSmoothness
+
+    updatedCamera = shiftCamera (cdx, 0, cdz) cam
 
     -- Drop all lines behind the camera
     updatedTrack = dropWhile ((< cz) . getZ . roadLinePosition) track

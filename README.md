@@ -2,6 +2,9 @@
 
 Do not edit `haskell-outrun.cabal` by hand as it is being generated automatically from `package.yaml`
 
+# How to run
+Run `stack run` in the console. After resolving dependencies, executable should run.
+
 ## Troubleshooting
 | Problem | Solution |
 | - | - |
