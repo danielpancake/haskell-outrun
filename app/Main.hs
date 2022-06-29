@@ -1,8 +1,14 @@
 module Main where
 
-import           Graphics.Gloss
+import           Fonts
 import           Outrun
-import           OutrunTypes
 
 main :: IO ()
-main = outrunPlayTest sampleTrack
+main = do
+  fontWaffle <- loadFont
+    "./images/fontWaffle/"
+    "fontWaffle"
+    "!#\"?&'(),-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz "
+
+  --outrunPlayTest sampleTrack
+  debugShowTextWithFont fontWaffle "hellow world"

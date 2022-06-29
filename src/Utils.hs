@@ -28,10 +28,10 @@ approach current target speed =
 
 -- | Non-linear approach function
 approachSmooth :: Float -> Float -> Float -> Float
-approachSmooth current target smoothness = result
+approachSmooth current target speed = result
   where
     eps = 1
-    val = current + (target - current) * smoothness
+    val = current + (target - current) * speed
 
     result =
       if (val <= target && val + eps >= target) ||

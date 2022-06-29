@@ -2,8 +2,12 @@
 
 Do not edit `haskell-outrun.cabal` by hand as it is being generated automatically from `package.yaml`
 
-# How to run
-Run `stack run` in the console. After resolving dependencies, executable should run.
+
+## How to run
+**Option 1**: Run `stack run` in the console. After resolving dependencies, executable should run.
+
+**Option 2**: In VScode press `F6` and choose `haskell run` option.
+
 
 ## Troubleshooting
 | Problem | Solution |

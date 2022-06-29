@@ -8,3 +8,4 @@
 
 0.2.0.1 - Added projecting functionality for road objects
           Refactored project architecture
+0.2.1.0 - Added text rendering with sprite fonts

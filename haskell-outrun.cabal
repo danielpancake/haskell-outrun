@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           haskell-outrun
-version:        0.2.0.1
+version:        0.2.1.0
 description:    OutRun clone game made in Haskell
 homepage:       https://github.com/danielpancake/haskell-outrun#readme
 bug-reports:    https://github.com/danielpancake/haskell-outrun/issues
@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Fonts
       Outrun
       OutrunTypes
       Utils
@@ -33,7 +34,8 @@ library
   hs-source-dirs:
       src
   build-depends:
-      base >=4.7 && <5
+      JuicyPixels
+    , base >=4.7 && <5
     , containers
     , gloss
     , gloss-juicy
@@ -48,7 +50,8 @@ executable haskell-outrun
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      JuicyPixels
+    , base >=4.7 && <5
     , containers
     , gloss
     , gloss-juicy
@@ -65,7 +68,8 @@ test-suite haskell-outrun-test
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      JuicyPixels
+    , base >=4.7 && <5
     , containers
     , gloss
     , gloss-juicy

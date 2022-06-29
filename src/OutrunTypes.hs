@@ -1,6 +1,5 @@
 module OutrunTypes (module OutrunTypes) where
 
-import qualified Data.Bifunctor                   as Bifunctor
 import           Data.Tuple.HT
 import           Graphics.Gloss
 import           Graphics.Gloss.Interface.IO.Game
@@ -29,8 +28,12 @@ data Projected a = Projected
   , projectedScale    :: Float
   }
 
+shiftProjected :: Point -> Projected a -> Projected a
+shiftProjected delta (Projected a p s) =
+  Projected a (shiftPoint p delta) s
+
 data RoadLine = RoadLine
-  { roadLineIndex     :: Int   -- Index of the 
+  { roadLineIndex     :: Int   -- Index of the road line
   , roadLinePosition  :: Pos3D -- World position of the line
 
     -- Both curve and pitch values make the camera follow the movement,
@@ -77,6 +80,9 @@ data Camera = Camera
 
   , cameraRenderDistance :: Int   -- Render distance
   , cameraSmoothness     :: Float -- How fast camera moves towards target position
+  , cameraParalax        :: Float -- Paralax factor. How much the camera is
+    -- offset from the road. Should be increased while turning right, decreased
+    -- while turning left
   }
 
 changeRenderDistance :: Int -> Camera -> Camera

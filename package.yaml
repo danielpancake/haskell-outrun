@@ -1,5 +1,5 @@
 name:                haskell-outrun
-version:             0.2.0.1
+version:             0.2.1.0
 github:              "danielpancake/haskell-outrun"
 license:             BSD3
 author:              "danielpancake and Leon Parepko"
@@ -10,10 +10,6 @@ extra-source-files:
 - README.md
 - ChangeLog.md
 
-# Metadata used when publishing your package
-# synopsis:            Short description of your package
-# category:            Web
-
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
@@ -23,6 +19,7 @@ dependencies:
 - base >= 4.7 && < 5
 - gloss
 - gloss-juicy
+- JuicyPixels
 - utility-ht
 - containers
 

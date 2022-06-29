@@ -1,0 +1,37 @@
+{
+  // Automatically created by phoityne-vscode extension.
+  "version": "2.0.0",
+  "presentation": {
+    "reveal": "always",
+    "panel": "new"
+  },
+  "tasks": [
+    {
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "type": "shell",
+      "label": "haskell run",
+      "command": "stack run"
+    },
+    {
+      "group": "build",
+      "label": "haskell build",
+      "type": "shell",
+      "command": "stack build"
+    },
+    {
+      "group": "build",
+      "type": "shell",
+      "label": "haskell clean & build",
+      "command": "stack clean && stack build"
+    },
+    {
+      "isBackground": true,
+      "type": "shell",
+      "label": "haskell watch",
+      "command": "stack build --test --no-run-tests --file-watch"
+    }
+  ]
+}
