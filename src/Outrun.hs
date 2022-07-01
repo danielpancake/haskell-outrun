@@ -420,15 +420,16 @@ updateGame dt state = updatedGameState
 
     spdZRatio = min spdZ maxZSpeed / maxZSpeed
 
-    aboba = 1000 * spdZRatio^2 * curveRate * centrifugal
-
-    abobus = case ddx of
-      0 -> 0.1
-      _ -> 0.01
+    centrifugalForce =
+      1000 * spdZRatio^2 * curveRate * centrifugal
 
     spdX' = if outOfBound
       then 0
-      else approachSmooth spdX (ddx - aboba) abobus
+      else approachSmooth spdX (ddx - centrifugalForce) (
+          case ddx of
+            0 -> 0.1
+            _ -> 0.01
+        )
 
     spdZ' = max 0 (approachSmooth spdZ ddz acc - hillRate * friction)
     ------- ^^^ prohibits player from going backwards
