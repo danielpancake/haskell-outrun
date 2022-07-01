@@ -3,6 +3,7 @@ module Outrun (module Outrun) where
 -- | This module contains all essential functions
 -- | for the Outrun game
 
+import qualified Data.Bifunctor
 import           Data.List
 import           Data.List.HT
 import           Fonts
@@ -10,14 +11,7 @@ import           Graphics.Gloss
 import           Graphics.Gloss.Interface.IO.Game
 import           OutrunTypes
 import           Utils
-
-makeColor8 :: Int -> Int -> Int -> Int -> Color
-makeColor8 r g b a =
-  makeColor
-    (fromIntegral r / 255)
-    (fromIntegral g / 255)
-    (fromIntegral b / 255)
-    (fromIntegral a / 255)
+import Palettes
 
 ---- | Projecting Section |-------------------------------------
 
@@ -151,16 +145,16 @@ drawRoadSegmentScaled scale p1 w1 p2 w2 =
   drawRoadSegment p1 (w1 * scale) p2 (w2 * scale)
 
 drawTerrainSegment
-  :: Point -- Bottom point of the terrain segment
+  :: (Int, Int) -- Draw resolution
+  -> Point -- Bottom point of the terrain segment
   -> Point -- Top point of the terrain segment
   -> Color -- Color of the terrain segment
   -> Picture
-drawTerrainSegment (x, y) p2 col =
-  -- Drawing the sides of the terrain
-  drawRoadSegment (x, -1000) 10000 p2 10000 (dark col)
-
-  -- Drawing the terrain road segment
-  <> drawRoadSegment (x, y) 10000 p2 10000 col
+drawTerrainSegment (screenW, screenH) p1 p2 col =
+  drawRoadSegment p1 ww p2 ww col
+  where
+    ww = fromIntegral screenW / 2
+    hh = fromIntegral screenH / 2
 
 drawProjectedObject :: Projected RoadObject -> Picture
 drawProjectedObject (Projected obj point factor) =
@@ -240,7 +234,7 @@ makeTrackCustom
 makeTrackCustom trackLength cols = take len (infRacingTrack track)
   where
     colors = case cols of
-      [] -> [green, dark green]
+      [] -> [afr32_sungrass, afr32_olive]
       _  -> cols
 
     len = fromCustom trackLengthValue trackLength
@@ -366,7 +360,7 @@ updateGame dt state = updatedGameState
 
     -- Update camera position
     cameraSmoothness = 0.5
-    cameraZOffset = 1000
+    cameraZOffset = 300
 
     cdx = (px - cx) * cameraSmoothness
     cdy = 0
@@ -375,23 +369,31 @@ updateGame dt state = updatedGameState
     updateCamera = shiftCamera (cdx, cdy, cdz)
 
     -- Update player position
+    horizBound =
+      roadLineWidth playerRL + defaultRoadSegmentWidth * 2.5
+
+    outOfBound = abs px > horizBound
+
     -- Value needed to return player back
     -- on the playable area of the racing track
-    horizClamp = let
-        off = defaultRoadSegmentWidth * 2
-        bound = roadLineWidth playerRL + off
-      in clamp (-bound) bound px - px
+    horizClamp = clamp (-horizBound) horizBound px - px
+    updatePosition = shiftRoadObject (spdX + 2*horizClamp, 0, spdZ)
 
-    updatePosition = shiftRoadObject (spdX + horizClamp, 0, spdZ)
+    -- Returns whether the key is pressed
+    checkPressed key = key `elem` pressedkeys
 
-    -- Returns numerical value of the key pressed
-    -- If given key is pressed, returns 1, otherwise 0
-    checkPressed x = fromEnum (Char x `elem` pressedkeys)
-
-    iUp    = checkPressed 'w'
-    iDown  = checkPressed 's'
-    iRight = checkPressed 'd'
-    iLeft  = checkPressed 'a'
+    iUp = fromEnum $
+      checkPressed (Char 'w') ||
+      checkPressed (SpecialKey KeyUp)
+    iDown = fromEnum $
+      checkPressed (Char 's') ||
+      checkPressed (SpecialKey KeyDown)
+    iRight = fromEnum $
+      checkPressed (Char 'd') ||
+      checkPressed (SpecialKey KeyRight)
+    iLeft = fromEnum $
+      checkPressed (Char 'a') ||
+      checkPressed (SpecialKey KeyLeft)
 
     -- Getting road line nearest to the player from behind
     (playerRL : _) = dropWhile ((< pz) . getZ . roadLinePosition) track
@@ -407,17 +409,26 @@ updateGame dt state = updatedGameState
     isOnTrack = (roadLineWidth playerRL - abs px) >= 0
 
     -- Get x- and z-direcred movement scalar
-    acc         = if isOnTrack then 0.0025 else 0.01
+    acc         = if isOnTrack then 0.0035 else 0.01
     friction    = if isOnTrack then 0.025  else 0.1
-    centrifugal = 0.3
-    maxZSpeed   = if isOnTrack then 320 else 50
+    centrifugal = 1
+    maxZSpeed   = if isOnTrack then 300 else 120
     maxXSpeed   = 200
 
     ddx = maxXSpeed * fromIntegral (iRight - iLeft)
     ddz = maxZSpeed * fromIntegral (iUp - iDown)
 
-    spdX' = approach spdX ddx 20
-          - ddz * curveRate * centrifugal
+    spdZRatio = min spdZ maxZSpeed / maxZSpeed
+
+    aboba = 1000 * spdZRatio^2 * curveRate * centrifugal
+
+    abobus = case ddx of
+      0 -> 0.1
+      _ -> 0.01
+
+    spdX' = if outOfBound
+      then 0
+      else approachSmooth spdX (ddx - aboba) abobus
 
     spdZ' = max 0 (approachSmooth spdZ ddz acc - hillRate * friction)
     ------- ^^^ prohibits player from going backwards
@@ -429,68 +440,137 @@ updateGame dt state = updatedGameState
         Dynamic (updatePosition player) (spdX', spdZ')
       }
 
-----------------------------------------------------------------
-
-
----- | Debug Section |------------------------------------------
-
-sampleTrack :: RacingTrack
-sampleTrack = connectTracksMany
-  [
-    makeTrack ShortTrack cols,
-    addHill Gently GoingUp (makeTrack ShortTrack cols),
-    makeTrack ShortTrack cols,
-    addHill Steeply GoingDown (makeTrack NormalTrack cols)
-  ]
+drawGame
+  :: (Int, Int)
+  -> [IndexedSegmentPic]
+  -> Font
+  -> OutrunGameState
+  -> Picture
+drawGame screenRes segmentDrawers font state =
+  scale scaleFactor scaleFactor (
+    game <> stats <> blackFrame
+  )
   where
-    cols = [makeColor8 90 80 80 255, makeColor8 90 80 80 255,
-            makeColor8 85 70 70 255, makeColor8 85 70 70 255]
+    GameState _ cam track player = state
+    cameraRes = cameraResolution cam
 
-outrunDisplayTest :: RacingTrack -> IO ()
-outrunDisplayTest track =
-  display window white (drawRacingTrack cam [] track [])
+    (cw, ch) = fromIntegralPair cameraRes
+    (sw, __) = fromIntegralPair screenRes
+
+    game = drawRacingTrack cam segmentDrawers track [player]
+
+    stats = drawStats font state
+
+    scaleFactor = sw / cw
+
+    blackRect = rectangleSolid cw 40
+    blackFrame =
+      translate 0 (ch/2 - 20) blackRect <>
+      translate 0 (20 - ch/2) blackRect
+
+drawStats :: Font -> OutrunGameState -> Picture
+drawStats font (GameState _ cam track player) =
+  speedometer
   where
-    cam    = Camera (0, 1500, 0) (1024, 768) 0.3 100 0.75 0
-    window = InWindow "Debug -- sample track" (1024, 768) (0, 0)
+    playerSpeed = round (snd (roadObjectVelocity player))
 
+    speedStyle = textWithFontExt font white 1 1 0.5
+    speedValue = speedStyle (show playerSpeed)
+    speedLabel = translate 24 0 (speedStyle "km/h")
+    speedTitle =
+      translate 0 10 (
+        textWithFontExt font afr32_cyan 1.51 1 1 "SPEED"
+      )
 
-outrunPlayTest :: Font -> RacingTrack -> IO ()
-outrunPlayTest font track =
-  play window (dark white) 60 initState drawGame handleInput updateGame
+    speedometer =
+      translate 150 100 $
+      scale 2 2 $
+      speedValue <> speedLabel <> speedTitle
+
+outrunPlay :: (Int, Int) -> Font -> RacingTrack -> IO ()
+outrunPlay screenRes font track =
+  play FullScreen afr32_hippieblue 60 initState
+  (drawGame screenRes [terrainPic, roadSegment] font)
+  handleInput updateGame
   where
-    cam    = Camera (0, 1000, 0) (1024, 768) 0.4 500 0.75 0
-    window = InWindow "Debug -- sample track ride" (1024, 768) (0, 0)
+    camRes = (600, 400)
+    cam = Camera (0, 500, 0) camRes 0.325 100 0.8 0
+
+    playerPic = translate 0 200 $ color afr32_red $ circle 200
+    player = Dynamic (RoadObject (0, 0, 1500) playerPic) (0, 0)
+
+    px = (getX . roadObjectPosition . roadObject) player
 
     initState = GameState [] cam (infRacingTrack track) player
 
-    playerPic = translate 0 500 $ color red $ circle 500
-    player = Dynamic (RoadObject (0, 0, 1500) playerPic) (0, 0)
-
-    terrainPic index nearP nearW farP farW col =
-      drawTerrainSegment nearP farP (
-        if even index then dark green else green
+    terrainPic index (_, nearY) _ (_, farY) _ _ =
+      drawTerrainSegment (600, 400) (px, nearY) (px, farY) (
+        if even index then afr32_olive else afr32_sungrass
       )
 
     roadSegment index nearP nearW farP farW col =
       drawRoadSegmentScaled 1.2 nearP nearW farP farW
           (
             if (index `mod` 8) `inRangeOf` (0, 3)
-              then white
-              else red
+              then afr32_white
+              else afr32_red
           )
       <>
       drawRoadSegment nearP nearW farP farW col
       <>
       if (index `mod` 16) `inRangeOf` (0, 8)
-        then drawRoadSegmentScaled 0.05 nearP nearW farP farW white
+        then drawRoadSegmentScaled 0.05 nearP nearW farP farW afr32_white
         else blank
 
-    drawGame :: OutrunGameState -> Picture
-    drawGame (GameState _ cam track player) = game <> stats
-      where
-       game = drawRacingTrack cam [roadSegment] track [player]
+----------------------------------------------------------------
 
-       playerSpeed = round (snd (roadObjectVelocity player))
 
-       stats =
-        textWithFontExt font yellow 5 5 0.5 (show playerSpeed ++ "km / h")
+---- | Debug Section |------------------------------------------
+
+sampleTrack :: RacingTrack
+sampleTrack = connectTracksMany (
+  map ($ trackRoadColors)
+  [
+    makeTrack LongTrack,
+    addCurve Gently TurningRight . makeTrack LongTrack,
+    makeTrack ShortTrack,
+    addCurve Moderately TurningRight . makeTrack LongTrack,
+    addCurve Moderately TurningLeft . makeTrack ShortTrack,
+    addCurve Moderately TurningRight . makeTrack ShortTrack,
+    makeTrack NormalTrack,
+    addCurve Moderately TurningRight . makeTrack NormalTrack,
+    addCurve Gently TurningLeft . makeTrack ShortTrack,
+    makeTrack NormalTrack,
+    addCurve Moderately TurningRight . makeTrack NormalTrack,
+    addCurve Moderately TurningLeft . makeTrack ShortTrack,
+    addCurve Moderately TurningRight . makeTrack ShortTrack,
+    addCurve Moderately TurningLeft . makeTrack ShortTrack,
+    makeTrack ShortTrack,
+    addCurve Steeply TurningRight . makeTrack ShortTrack
+  ])
+  where
+    trackRoadColors =
+      [
+        afr32_darkdorado
+      ]
+
+outrunDisplayTest :: RacingTrack -> IO ()
+outrunDisplayTest track =
+  display window white (drawRacingTrack cam [] track [])
+  where
+    cam    = Camera (0, 1500, 0) (600, 400) 0.3 100 0.75 0
+    window = InWindow "Debug -- sample track" (960, 540) (0, 0)
+
+drawGameDebug
+  :: (Int, Int)
+  -> [IndexedSegmentPic]
+  -> Font
+  -> OutrunGameState
+  -> Picture
+drawGameDebug (screenW, screenH) segmentDrawers font (GameState _ cam track player) =
+  game <> outline
+  where
+    game = drawRacingTrack cam segmentDrawers track [player]
+    (cw, ch) = cameraResolution cam
+    outline = color afr32_red $
+      rectangleWire (fromIntegral cw) (fromIntegral ch)

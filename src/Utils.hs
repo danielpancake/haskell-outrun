@@ -20,6 +20,12 @@ clamp mn mx = max mn . min mx
 splitHalves :: [a] -> ([a], [a])
 splitHalves list = splitAt ((length list + 1) `div` 2) list
 
+dupe :: a -> (a, a)
+dupe a = (a, a)
+
+fromIntegralPair :: (Integral a, Fractional b) => (a, a) -> (b, b)
+fromIntegralPair (a, b) = (fromIntegral a, fromIntegral b)
+
 ---- | Interpolation functions |--------------------------------
 
 -- | Approaches the target value with the given speed

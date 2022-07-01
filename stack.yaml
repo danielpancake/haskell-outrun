@@ -43,8 +43,8 @@ extra-deps:
 #
 # extra-deps: []
 
-# ghc-options:
-#   gloss: -O2 -threaded
+ghc-options:
+  gloss: -O2 -threaded
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

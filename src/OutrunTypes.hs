@@ -66,8 +66,8 @@ setRoadDirection d rl = rl { roadDirection = d }
 setRoadLineColor :: Color -> RoadLine -> RoadLine
 setRoadLineColor c rl = rl { roadLineColor = c }
 
-defaultRoadSegmentLength = 250  :: Float
-defaultRoadSegmentWidth  = 2000 :: Float
+defaultRoadSegmentLength = 120  :: Float
+defaultRoadSegmentWidth  = 1000 :: Float
 
 shiftRoadLine :: Pos3D -> RoadLine -> RoadLine
 shiftRoadLine delta roadline =
@@ -114,17 +114,17 @@ data TrackLength = ShortTrack | NormalTrack | LongTrack
 
 trackLengthValue :: TrackLength -> Int
 trackLengthValue length = case length of
-  ShortTrack  -> 50
-  NormalTrack -> 150
-  LongTrack   -> 300
+  ShortTrack  -> 200
+  NormalTrack -> 450
+  LongTrack   -> 600
 
 data TrackChangeRate = Gently | Moderately | Steeply
 
 trackCurveValue :: TrackChangeRate -> Float
 trackCurveValue curve = case curve of
-  Gently     -> 0.1
-  Moderately -> 0.5
-  Steeply    -> 1
+  Gently     -> 0.02
+  Moderately -> 0.05
+  Steeply    -> 0.1
 
 setRoadLineCurveRate :: Float -> RoadLine -> RoadLine
 setRoadLineCurveRate c rl = rl { roadLineCurveRate = c }
