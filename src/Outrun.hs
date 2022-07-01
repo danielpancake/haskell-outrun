@@ -5,6 +5,7 @@ module Outrun (module Outrun) where
 
 import           Data.List
 import           Data.List.HT
+import           Fonts
 import           Graphics.Gloss
 import           Graphics.Gloss.Interface.IO.Game
 import           OutrunTypes
@@ -55,27 +56,27 @@ projectRoadLines :: Camera -> [RoadLine] -> [Projected RoadLine]
 projectRoadLines = projectRoadLines' (0, 0, 0, 0)
   where
     projectRoadLines' _ _ [] = []
-    projectRoadLines' (x, dx, y, dy) cam (line : rest) =
+    projectRoadLines' (dx, ddx, dy, ddy) cam (line : rest) =
       case cameraRenderDistance cam of
 
         0 -> [] -- Zero render distance
 
-        _ -> projectRoadLines' (x', dx', y', dy') cam' rest ++ [lineProj]
+        _ -> projectRoadLines' (dx', ddx', dy', ddy') cam' rest ++ [lineProj]
           where
             -- Applying change in curve and pitch values
-            x' = x + dx
-            y' = y + dy
+            dx' = dx + ddx
+            dy' = dy + ddy
 
-            dx' = dx + roadLineCurveRate line
-            dy' = dy + roadLinePitchRate line
+            ddx' = ddx + roadLineCurveRate line
+            ddy' = ddy + roadLinePitchRate line
 
             -- Projecting road line
-            lineProj = shiftProjected (x, 0)
-              (projectRoadLine cam (shiftRoadLine (0, y, 0) line))
+            lineProj = shiftProjected (dx, 0)
+              (projectRoadLine cam (shiftRoadLine (0, dy, 0) line))
 
             -- Reducing number of road lines to render
             rendDist = cameraRenderDistance cam
-            cam' = changeRenderDistance (rendDist - 1) cam
+            cam' = setRenderDistance (rendDist - 1) cam
 
 projectRoadObject
   :: Projected RoadLine -- Nearest road line behind the object
@@ -247,7 +248,8 @@ makeTrackCustom trackLength cols = take len (infRacingTrack track)
     track = foldr
       (connectTracks
       . singleton
-      . RoadLine 0 (0, 0, 0) 0 0 defaultRoadSegmentWidth
+      . flip setRoadLineColor
+        defaultRoadLine
       ) [] colors
 
 -- | Connects two tracks together
@@ -260,8 +262,8 @@ connectTracks track =
     -- Getting the y coordinate of the last road line of the first track
     -- and lifting second track by this amount
     dy = case lastMaybe track of
-      Nothing                             -> 0
-      Just (RoadLine _ (_, y, _) _ _ _ _) -> y
+      Nothing       -> 0
+      Just roadline -> getY (roadLinePosition roadline)
 
     dz = fromIntegral len * defaultRoadSegmentLength
 
@@ -288,9 +290,12 @@ addCurveCustom
   -> RacingTrack
   -> RacingTrack
 addCurveCustom curve dir =
-  map (changeRoadLineCurveRate (trackCurveDir dir (fromCustom trackCurveValue curve)))
+  map (setRoadLineCurveRate (trackCurveDir dir (fromCustom trackCurveValue curve)))
 
 -- | Adds a pitch to a track
+-- Positive pitch should be followed by negative pitch
+-- and vice versa to create a hill, otherwise the track
+-- will just go upwards or downwards!
 addPitch :: TrackChangeRate -> TrackPitchDirection -> RacingTrack -> RacingTrack
 addPitch = addPitchCustom . Common
 
@@ -301,7 +306,30 @@ addPitchCustom
   -> RacingTrack
   -> RacingTrack
 addPitchCustom pitch dir =
-  map (changeRoadLinePitchRate (trackPitchDir dir (fromCustom trackPitchValue pitch)))
+  map (setRoadLinePitchRate (trackPitchDir dir (fromCustom trackPitchValue pitch)))
+
+-- | Adds a hill to a track
+addHill :: TrackChangeRate -> TrackDirection -> RacingTrack -> RacingTrack
+addHill = addHillCustom . Common
+
+-- | Adds a custom hill to a track
+addHillCustom
+  :: WithCustom TrackChangeRate Float
+  -> TrackDirection
+  -> RacingTrack
+  -> RacingTrack
+addHillCustom hill dir track =
+  case dir of
+    GoingUp   ->
+         addPitchCustom hill PitchIncreasing a
+      ++ addPitchCustom hill PitchDecreasing b
+    GoingDown ->
+         addPitchCustom hill PitchDecreasing a
+      ++ addPitchCustom hill PitchIncreasing b
+
+    _ -> track
+  where
+    (a, b) = splitHalves (map (setRoadDirection dir) track)
 
 ----------------------------------------------------------------
 
@@ -327,6 +355,35 @@ handleInput ev state = case ev of
 updateGame :: Float -> OutrunGameState -> OutrunGameState
 updateGame dt state = updatedGameState
   where
+    -- Unpacking the state
+    GameState pressedkeys cam track (Dynamic player (spdX, spdZ)) = state
+
+    (cx, cy, cz) = cameraPosition cam
+    (px, __, pz) = roadObjectPosition player
+
+    -- Drop all lines behind the camera
+    updateTrack = dropWhile ((< cz) . getZ . roadLinePosition)
+
+    -- Update camera position
+    cameraSmoothness = 0.5
+    cameraZOffset = 1000
+
+    cdx = (px - cx) * cameraSmoothness
+    cdy = 0
+    cdz = (pz - cameraZOffset - cz) * cameraSmoothness
+
+    updateCamera = shiftCamera (cdx, cdy, cdz)
+
+    -- Update player position
+    -- Value needed to return player back
+    -- on the playable area of the racing track
+    horizClamp = let
+        off = defaultRoadSegmentWidth * 2
+        bound = roadLineWidth playerRL + off
+      in clamp (-bound) bound px - px
+
+    updatePosition = shiftRoadObject (spdX + horizClamp, 0, spdZ)
+
     -- Returns numerical value of the key pressed
     -- If given key is pressed, returns 1, otherwise 0
     checkPressed x = fromEnum (Char x `elem` pressedkeys)
@@ -336,22 +393,22 @@ updateGame dt state = updatedGameState
     iRight = checkPressed 'd'
     iLeft  = checkPressed 'a'
 
-    GameState pressedkeys cam track (Dynamic player (spdX, spdZ)) = state
-
-    (cx, cy, cz) = cameraPosition cam
-    (px, __, pz) = roadObjectPosition player
-
     -- Getting road line nearest to the player from behind
     (playerRL : _) = dropWhile ((< pz) . getZ . roadLinePosition) track
 
     curveRate = roadLineCurveRate playerRL
-    pitchRate = roadLinePitchRate playerRL
+    hillRate  = abs (roadLinePitchRate playerRL) *
+      case roadDirection playerRL of
+        GoingUp   ->  1
+        GoingDown -> -1
+        _         ->  0
 
     -- Shows whether the player is on the track or not
     isOnTrack = (roadLineWidth playerRL - abs px) >= 0
 
     -- Get x- and z-direcred movement scalar
     acc         = if isOnTrack then 0.0025 else 0.01
+    friction    = if isOnTrack then 0.025  else 0.1
     centrifugal = 0.3
     maxZSpeed   = if isOnTrack then 320 else 50
     maxXSpeed   = 200
@@ -359,36 +416,17 @@ updateGame dt state = updatedGameState
     ddx = maxXSpeed * fromIntegral (iRight - iLeft)
     ddz = maxZSpeed * fromIntegral (iUp - iDown)
 
-    spdX' = approach spdX ddx 20 - ddz * curveRate * centrifugal
-    spdZ' = max 0 (approachSmooth spdZ ddz acc - pitchRate / 100)
-    --      ^^^ prohibits player from going backwards
+    spdX' = approach spdX ddx 20
+          - ddz * curveRate * centrifugal
 
-    -- Retuns value
-    dxClamp = let
-        off = defaultRoadSegmentWidth * 2
-        bound = roadLineWidth playerRL + off
-      in clamp (-bound) bound px - px
-
-    -- Update player position
-    updatedPlayer =
-      shiftRoadObject (spdX' + dxClamp, 0, spdZ') player
-
-    -- Update camera position
-    cameraSmoothness = 0.5
-    cameraZOffset = 1000
-
-    cdx = (px - cx) * cameraSmoothness
-    cdz = (pz - cameraZOffset - cz) * cameraSmoothness
-
-    updatedCamera = shiftCamera (cdx, 0, cdz) cam
-
-    -- Drop all lines behind the camera
-    updatedTrack = dropWhile ((< cz) . getZ . roadLinePosition) track
+    spdZ' = max 0 (approachSmooth spdZ ddz acc - hillRate * friction)
+    ------- ^^^ prohibits player from going backwards
 
     updatedGameState = state
-      { gameRacingTrack = updatedTrack
-      , gameCamera      = updatedCamera
-      , gamePlayer      = Dynamic updatedPlayer (spdX', spdZ')
+      { gameRacingTrack = updateTrack track
+      , gameCamera      = updateCamera cam
+      , gamePlayer      =
+        Dynamic (updatePosition player) (spdX', spdZ')
       }
 
 ----------------------------------------------------------------
@@ -400,14 +438,13 @@ sampleTrack :: RacingTrack
 sampleTrack = connectTracksMany
   [
     makeTrack ShortTrack cols,
-    addPitch Moderately GoingUp (makeTrack ShortTrack cols),
-    addPitch Steeply GoingDown (makeTrack LongTrack cols),
-    makeTrack ShortTrack cols
+    addHill Gently GoingUp (makeTrack ShortTrack cols),
+    makeTrack ShortTrack cols,
+    addHill Steeply GoingDown (makeTrack NormalTrack cols)
   ]
   where
     cols = [makeColor8 90 80 80 255, makeColor8 90 80 80 255,
             makeColor8 85 70 70 255, makeColor8 85 70 70 255]
-
 
 outrunDisplayTest :: RacingTrack -> IO ()
 outrunDisplayTest track =
@@ -417,11 +454,11 @@ outrunDisplayTest track =
     window = InWindow "Debug -- sample track" (1024, 768) (0, 0)
 
 
-outrunPlayTest :: RacingTrack -> IO ()
-outrunPlayTest track =
-  play window white 60 initState drawGame handleInput updateGame
+outrunPlayTest :: Font -> RacingTrack -> IO ()
+outrunPlayTest font track =
+  play window (dark white) 60 initState drawGame handleInput updateGame
   where
-    cam    = Camera (0, 1000, 0) (1024, 768) 0.4 100 0.75 0
+    cam    = Camera (0, 1000, 0) (1024, 768) 0.4 500 0.75 0
     window = InWindow "Debug -- sample track ride" (1024, 768) (0, 0)
 
     initState = GameState [] cam (infRacingTrack track) player
@@ -449,7 +486,11 @@ outrunPlayTest track =
         else blank
 
     drawGame :: OutrunGameState -> Picture
-    drawGame (GameState _ cam track player) =
-      drawRacingTrack cam [roadSegment] track [player]
-      <>
-      text (show (roadObjectVelocity player))
+    drawGame (GameState _ cam track player) = game <> stats
+      where
+       game = drawRacingTrack cam [roadSegment] track [player]
+
+       playerSpeed = round (snd (roadObjectVelocity player))
+
+       stats =
+        textWithFontExt font yellow 5 5 0.5 (show playerSpeed ++ "km / h")

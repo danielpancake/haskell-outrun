@@ -17,6 +17,9 @@ inRangeOf val (from, to) = (from <= val) && (val <= to)
 clamp :: Ord a => a -> a -> a -> a
 clamp mn mx = max mn . min mx
 
+splitHalves :: [a] -> ([a], [a])
+splitHalves list = splitAt ((length list + 1) `div` 2) list
+
 ---- | Interpolation functions |--------------------------------
 
 -- | Approaches the target value with the given speed
@@ -40,15 +43,15 @@ approachSmooth current target speed = result
         else val
 
 
----- | All interpolation functions below (typed InterpolationFunc)
----- | take a value between 0 and 1
-type InterpolationFunc = Float -> Float
+-- ---- | All interpolation functions below (typed InterpolationFunc)
+-- ---- | take a value between 0 and 1
+-- type InterpolationFunc = Float -> Float
 
-easeInOutSine :: InterpolationFunc
-easeInOutSine x = (1 - cos (x * pi)) / 2
+-- easeInOutSine :: InterpolationFunc
+-- easeInOutSine x = (1 - cos (x * pi)) / 2
 
-easeInSine :: InterpolationFunc
-easeInSine x = 1 - cos (x * pi / 2)
+-- easeInSine :: InterpolationFunc
+-- easeInSine x = 1 - cos (x * pi / 2)
 
-easeOutQuint :: InterpolationFunc
-easeOutQuint x = 1 - ((1 - x) ** 5)
+-- easeOutQuint :: InterpolationFunc
+-- easeOutQuint x = 1 - ((1 - x) ** 5)

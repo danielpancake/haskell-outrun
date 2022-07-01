@@ -32,6 +32,8 @@ shiftProjected :: Point -> Projected a -> Projected a
 shiftProjected delta (Projected a p s) =
   Projected a (shiftPoint p delta) s
 
+data TrackDirection = Straight | GoingUp | GoingDown
+
 data RoadLine = RoadLine
   { roadLineIndex     :: Int   -- Index of the road line
   , roadLinePosition  :: Pos3D -- World position of the line
@@ -40,10 +42,15 @@ data RoadLine = RoadLine
     -- whereas roadline height does not
   , roadLineCurveRate :: Float -- Curve rate
   , roadLinePitchRate :: Float -- Pitch rate
+  , roadDirection     :: TrackDirection -- Direction of the road line
 
   , roadLineWidth     :: Float -- Width of the road segment (horizontally)
   , roadLineColor     :: Color -- Color of the road segment
   }
+
+defaultRoadLine :: RoadLine
+defaultRoadLine =
+  RoadLine 0 (0, 0, 0) 0 0 Straight defaultRoadSegmentWidth green
 
 setRoadLineIndex :: Int -> RoadLine -> RoadLine
 setRoadLineIndex i rl = rl { roadLineIndex = i }
@@ -52,6 +59,12 @@ shiftRoadLineIndex :: Int -> RoadLine -> RoadLine
 shiftRoadLineIndex delta rl = setRoadLineIndex newIndex rl
   where
     newIndex = roadLineIndex rl + delta
+
+setRoadDirection :: TrackDirection -> RoadLine -> RoadLine
+setRoadDirection d rl = rl { roadDirection = d }
+
+setRoadLineColor :: Color -> RoadLine -> RoadLine
+setRoadLineColor c rl = rl { roadLineColor = c }
 
 defaultRoadSegmentLength = 250  :: Float
 defaultRoadSegmentWidth  = 2000 :: Float
@@ -85,8 +98,11 @@ data Camera = Camera
     -- while turning left
   }
 
-changeRenderDistance :: Int -> Camera -> Camera
-changeRenderDistance renderDist cam = cam {cameraRenderDistance = renderDist}
+setCameraDepth :: Float -> Camera -> Camera
+setCameraDepth depth cam = cam { cameraDepth = depth }
+
+setRenderDistance :: Int -> Camera -> Camera
+setRenderDistance dist cam = cam {cameraRenderDistance = dist }
 
 shiftCamera :: Pos3D -> Camera -> Camera
 shiftCamera delta cam =
@@ -110,19 +126,17 @@ trackCurveValue curve = case curve of
   Moderately -> 0.5
   Steeply    -> 1
 
-changeRoadLineCurveRate :: Float -> RoadLine -> RoadLine
-changeRoadLineCurveRate curve roadLine =
-  roadLine { roadLineCurveRate = curve }
+setRoadLineCurveRate :: Float -> RoadLine -> RoadLine
+setRoadLineCurveRate c rl = rl { roadLineCurveRate = c }
 
 trackPitchValue :: TrackChangeRate -> Float
 trackPitchValue pitch = case pitch of
-  Gently     -> 1
-  Moderately -> 5
+  Gently     -> 5
+  Moderately -> 8
   Steeply    -> 10
 
-changeRoadLinePitchRate :: Float -> RoadLine -> RoadLine
-changeRoadLinePitchRate pitch roadLine =
-  roadLine { roadLinePitchRate = pitch }
+setRoadLinePitchRate :: Float -> RoadLine -> RoadLine
+setRoadLinePitchRate p rl = rl { roadLinePitchRate = p }
 
 data TrackCurveDirection = TurningLeft | TurningRight
 
@@ -131,27 +145,13 @@ trackCurveDir dir = case dir of
   TurningLeft  -> negate
   TurningRight -> id
 
-data TrackPitchDirection = GoingUp | GoingDown
+data TrackPitchDirection
+  = PitchDecreasing | PitchIncreasing
 
 trackPitchDir :: Num a => TrackPitchDirection -> (a -> a)
 trackPitchDir dir = case dir of
-  GoingDown -> negate
-  GoingUp   -> id
-
--- | Hills are elevations of the road segments height
-data TrackHill = SmallHill | MediumHill | LargeHill
-
-trackHillHeight :: TrackHill -> Float
-trackHillHeight hill = case hill of
-  SmallHill  -> 1000
-  MediumHill -> 5000
-  LargeHill  -> 8000
-
-trackHillDir :: Num a => TrackPitchDirection -> (a -> a)
-trackHillDir dir = case dir of
-  GoingDown -> (1 -) -- InterpolationFunc takes values from 0 to 1
-                     -- For that reason, inversion is done that way
-  GoingUp   -> id
+  PitchDecreasing -> negate
+  PitchIncreasing -> id
 
 data OutrunGameState = GameState
   { gameInput       :: [Key]

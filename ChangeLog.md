@@ -9,3 +9,6 @@
 0.2.0.1 - Added projecting functionality for road objects
           Refactored project architecture
 0.2.1.0 - Added text rendering with sprite fonts
+0.2.5.0 - Added colourful fonts!
+          Removed hills and interpolation functions and added hills based on the pitch value
+          Fixed improper used of pitch value

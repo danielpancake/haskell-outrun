@@ -10,5 +10,5 @@ main = do
     "fontWaffle"
     "!#\"?&'(),-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz "
 
-  --outrunPlayTest sampleTrack
-  debugShowTextWithFont fontWaffle "hellow world"
+  outrunPlayTest (proccessFont fontWaffle) sampleTrack
+  --debugShowTextWithFont fontWaffle "hellow world"
