@@ -66,8 +66,10 @@ setRoadDirection d rl = rl { roadDirection = d }
 setRoadLineColor :: Color -> RoadLine -> RoadLine
 setRoadLineColor c rl = rl { roadLineColor = c }
 
-defaultRoadSegmentLength = 120  :: Float
-defaultRoadSegmentWidth  = 1000 :: Float
+defaultRoadSegmentLength :: Float
+defaultRoadSegmentLength = 120
+defaultRoadSegmentWidth :: Float
+defaultRoadSegmentWidth  = 1000
 
 shiftRoadLine :: Pos3D -> RoadLine -> RoadLine
 shiftRoadLine delta roadline =
@@ -109,6 +111,15 @@ shiftCamera delta cam =
   cam { cameraPosition = newPos }
   where
     newPos = shiftPosition (cameraPosition cam) delta
+
+shiftParalax :: Float -> Camera -> Camera
+shiftParalax delta cam =
+  cam { cameraParalax = newParalax }
+  where
+    newParalax = cameraParalax cam + delta
+
+setParalax :: Float -> Camera -> Camera
+setParalax paralax cam = cam { cameraParalax = paralax }
 
 data TrackLength = ShortTrack | NormalTrack | LongTrack
 
@@ -158,6 +169,8 @@ data OutrunGameState = GameState
   , gameCamera      :: Camera
   , gameRacingTrack :: RacingTrack
   , gamePlayer      :: DynamicRoadObject
+  , gameTime        :: Float
+  , gameBackground  :: Picture
   }
 
 data RoadObject = RoadObject

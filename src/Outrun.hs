@@ -4,14 +4,15 @@ module Outrun (module Outrun) where
 -- | for the Outrun game
 
 import qualified Data.Bifunctor
+import           Data.Fixed
 import           Data.List
 import           Data.List.HT
 import           Fonts
 import           Graphics.Gloss
 import           Graphics.Gloss.Interface.IO.Game
 import           OutrunTypes
+import           Palettes
 import           Utils
-import Palettes
 
 ---- | Projecting Section |-------------------------------------
 
@@ -217,6 +218,14 @@ drawRacingTrack cam segmentDrawers track roadObjs =
             ((drawProjectedObject . projectRoadObject near far) . roadObject)
             (objsBetween near far)
 
+tripleStripPic :: Float -> Picture -> Picture
+tripleStripPic off pic =
+  pictures [
+    translate (-off) 0 pic,
+    pic,
+    translate 0 off pic
+  ]
+
 ----------------------------------------------------------------
 
 
@@ -350,7 +359,9 @@ updateGame :: Float -> OutrunGameState -> OutrunGameState
 updateGame dt state = updatedGameState
   where
     -- Unpacking the state
-    GameState pressedkeys cam track (Dynamic player (spdX, spdZ)) = state
+    GameState pressedkeys cam track
+      (Dynamic player (spdX, spdZ))
+      time background = state
 
     (cx, cy, cz) = cameraPosition cam
     (px, __, pz) = roadObjectPosition player
@@ -366,7 +377,8 @@ updateGame dt state = updatedGameState
     cdy = 0
     cdz = (pz - cameraZOffset - cz) * cameraSmoothness
 
-    updateCamera = shiftCamera (cdx, cdy, cdz)
+    updateCamera = shiftCamera (cdx, cdy, cdz) .
+      setParalax (mod' (cameraParalax cam - centrifugalForce / 50) 600)
 
     -- Update player position
     horizBound =
@@ -449,14 +461,17 @@ drawGame
   -> Picture
 drawGame screenRes segmentDrawers font state =
   scale scaleFactor scaleFactor (
-    game <> stats <> blackFrame
+    back <> game <> stats <> blackFrame
   )
   where
-    GameState _ cam track player = state
+    GameState _ cam track player _ background = state
     cameraRes = cameraResolution cam
 
     (cw, ch) = fromIntegralPair cameraRes
     (sw, __) = fromIntegralPair screenRes
+
+    back = tripleStripPic cw $
+      translate (cameraParalax cam) 80 background
 
     game = drawRacingTrack cam segmentDrawers track [player]
 
@@ -470,7 +485,7 @@ drawGame screenRes segmentDrawers font state =
       translate 0 (20 - ch/2) blackRect
 
 drawStats :: Font -> OutrunGameState -> Picture
-drawStats font (GameState _ cam track player) =
+drawStats font (GameState _ cam track player _ _) =
   speedometer
   where
     playerSpeed = round (snd (roadObjectVelocity player))
@@ -488,11 +503,18 @@ drawStats font (GameState _ cam track player) =
       scale 2 2 $
       speedValue <> speedLabel <> speedTitle
 
-outrunPlay :: (Int, Int) -> Font -> RacingTrack -> IO ()
-outrunPlay screenRes font track =
+outrunPlay
+  :: Picture
+  -> (Int, Int)
+  -> Font
+  -> RacingTrack
+  -> IO ()
+outrunPlay background screenRes font track =
+
   play FullScreen afr32_hippieblue 60 initState
-  (drawGame screenRes [terrainPic, roadSegment] font)
-  handleInput updateGame
+    (drawGame screenRes [terrainPic, roadSegment] font)
+    handleInput updateGame
+
   where
     camRes = (600, 400)
     cam = Camera (0, 500, 0) camRes 0.325 100 0.8 0
@@ -502,7 +524,8 @@ outrunPlay screenRes font track =
 
     px = (getX . roadObjectPosition . roadObject) player
 
-    initState = GameState [] cam (infRacingTrack track) player
+    initState =
+      GameState [] cam (infRacingTrack track) player 0 background
 
     terrainPic index (_, nearY) _ (_, farY) _ _ =
       drawTerrainSegment (600, 400) (px, nearY) (px, farY) (
@@ -568,7 +591,7 @@ drawGameDebug
   -> Font
   -> OutrunGameState
   -> Picture
-drawGameDebug (screenW, screenH) segmentDrawers font (GameState _ cam track player) =
+drawGameDebug (screenW, screenH) segmentDrawers font (GameState _ cam track player _ _) =
   game <> outline
   where
     game = drawRacingTrack cam segmentDrawers track [player]

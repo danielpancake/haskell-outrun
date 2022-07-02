@@ -28,6 +28,12 @@
       "command": "stack clean && stack build"
     },
     {
+      "group": "build",
+      "type": "shell",
+      "label": "haskell clean & build & run",
+      "command": "stack clean && stack build && stack run"
+    },
+    {
       "isBackground": true,
       "type": "shell",
       "label": "haskell watch",
