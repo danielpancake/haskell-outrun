@@ -84,7 +84,7 @@ projectRoadObject near far roadObject =
     getPosRL = roadLinePosition . fromProjected
 
     -- Getting the position of the road object
-    (objX, _, objZ) = roadObjectPosition roadObject
+    (objX, objY, objZ) = roadObjectPosition roadObject
 
     -- Getting the position of the two nearest road lines
     -- ahead and behind the road object
@@ -111,7 +111,7 @@ projectRoadObject near far roadObject =
     -- Point on the screen where the road object is
     projPoint = (
         nearX + projRatio * (farX - nearX) + objX * scale,
-        nearY + projRatio * (farY - nearY)
+        nearY + projRatio * (farY - nearY) + objY * scale
       )
 
 ----------------------------------------------------------------
@@ -151,8 +151,8 @@ drawTerrainSegment
   -> Point -- Top point of the terrain segment
   -> Color -- Color of the terrain segment
   -> Picture
-drawTerrainSegment (screenW, screenH) p1 p2 col =
-  drawRoadSegment p1 ww p2 ww col
+drawTerrainSegment (screenW, screenH) p1 p2 =
+  drawRoadSegment p1 ww p2 ww
   where
     ww = fromIntegral screenW / 2
     hh = fromIntegral screenH / 2
@@ -212,11 +212,17 @@ drawRacingTrack cam segmentDrawers track roadObjs =
         roadSegment =
           pictures (map (\f -> f index nearP nearW farP farW color) segmentDrawers)
 
+        -- Projecting static objects
+        staticObjs = roadObjects (fromProjected near)
+
+        -- Projecting dynamic objects
+        dynamicObjs =
+          map roadObject (objsBetween near far)
+
         -- Drawing road objects between two road lines
         drawnRoadObjects = pictures $
-          map
-            ((drawProjectedObject . projectRoadObject near far) . roadObject)
-            (objsBetween near far)
+          map (drawProjectedObject . projectRoadObject near far)
+            (staticObjs ++ dynamicObjs)
 
 tripleStripPic :: Float -> Picture -> Picture
 tripleStripPic off pic =
@@ -519,7 +525,7 @@ outrunPlay background screenRes font track =
     camRes = (600, 400)
     cam = Camera (0, 500, 0) camRes 0.325 100 0.8 0
 
-    playerPic = translate 0 200 $ color afr32_red $ circle 200
+    playerPic = translate 0 100 $ color afr32_red $ circle 200
     player = Dynamic (RoadObject (0, 0, 1500) playerPic) (0, 0)
 
     px = (getX . roadObjectPosition . roadObject) player
@@ -555,7 +561,7 @@ sampleTrack :: RacingTrack
 sampleTrack = connectTracksMany (
   map ($ trackRoadColors)
   [
-    makeTrack LongTrack,
+    addRoadObjectsTest . makeTrack LongTrack,
     addCurve Gently TurningRight . makeTrack LongTrack,
     makeTrack ShortTrack,
     addCurve Moderately TurningRight . makeTrack LongTrack,
@@ -573,10 +579,16 @@ sampleTrack = connectTracksMany (
     addCurve Steeply TurningRight . makeTrack ShortTrack
   ])
   where
-    trackRoadColors =
-      [
-        afr32_darkdorado
-      ]
+    trackRoadColors = [ afr32_darkdorado ]
+
+addRoadObjectsTest :: RacingTrack -> RacingTrack
+addRoadObjectsTest = map (\rl ->
+  case roadLineIndex rl `mod` 10 of
+    0 -> addRoadObject (shiftRoadObject (roadLinePosition rl) testObj) rl
+    _ -> rl
+    )
+  where
+    testObj = RoadObject (-2000, 250, 80) (rectangleSolid 500 500)
 
 outrunDisplayTest :: RacingTrack -> IO ()
 outrunDisplayTest track =

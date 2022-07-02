@@ -46,11 +46,20 @@ data RoadLine = RoadLine
 
   , roadLineWidth     :: Float -- Width of the road segment (horizontally)
   , roadLineColor     :: Color -- Color of the road segment
+
+    -- Position of the static road objects is relative
+    -- to the road line position
+    -- Z-coordinate cannot exceed the road line length!
+    -- by default it is value of: defaultRoadSegmentLength
+  , roadObjects       :: [RoadObject] -- Objects on the road segment
   }
+
+addRoadObject :: RoadObject -> RoadLine -> RoadLine
+addRoadObject obj rl = rl { roadObjects = obj : roadObjects rl }
 
 defaultRoadLine :: RoadLine
 defaultRoadLine =
-  RoadLine 0 (0, 0, 0) 0 0 Straight defaultRoadSegmentWidth green
+  RoadLine 0 (0, 0, 0) 0 0 Straight defaultRoadSegmentWidth green []
 
 setRoadLineIndex :: Int -> RoadLine -> RoadLine
 setRoadLineIndex i rl = rl { roadLineIndex = i }
