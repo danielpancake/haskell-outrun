@@ -13,3 +13,5 @@
           Removed hills and interpolation functions and added hills based on the pitch value
           Fixed improper used of pitch value
 0.2.8.0 - Added parallax scrolling
+
+0.3.1.0 - Refactored project architecture (again)

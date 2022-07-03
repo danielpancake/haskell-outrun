@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           haskell-outrun
-version:        0.2.8.0
+version:        0.3.1.0
 description:    OutRun clone game made in Haskell
 homepage:       https://github.com/danielpancake/haskell-outrun#readme
 bug-reports:    https://github.com/danielpancake/haskell-outrun/issues
@@ -27,7 +27,19 @@ library
   exposed-modules:
       Fonts
       Outrun
-      OutrunTypes
+      Outrun.Building
+      Outrun.Data
+      Outrun.Data.Camera
+      Outrun.Data.Custom
+      Outrun.Data.Defaults
+      Outrun.Data.GameState
+      Outrun.Data.Projected
+      Outrun.Data.RacingTrack
+      Outrun.Data.RoadLine
+      Outrun.Data.RoadObject
+      Outrun.InputProcessing
+      Outrun.Projecting
+      Outrun.Rendering
       Palettes
       Utils
   other-modules:

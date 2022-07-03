@@ -1,6 +1,7 @@
 module Palettes (module Palettes) where
 import           Graphics.Gloss
 
+-- | Converts four integer RGBA values to a Gloss.Color
 makeColor8 :: Int -> Int -> Int -> Int -> Color
 makeColor8 r g b a =
   makeColor

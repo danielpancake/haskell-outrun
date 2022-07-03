@@ -24,4 +24,3 @@ main = do
     screenRes
     (proccessFontColors [afr32_cyan] fontWaffle)
     sampleTrack
-  --debugShowTextWithFont fontWaffle "hellow world"

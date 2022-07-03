@@ -1,5 +1,4 @@
 module Fonts (module Fonts) where
-
 import           Codec.Picture
 import           Data.Bifunctor
 import           Data.List
