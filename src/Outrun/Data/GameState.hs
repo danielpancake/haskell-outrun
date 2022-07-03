@@ -9,6 +9,13 @@ data OutrunGameState = GameState
   , gameCamera      :: Camera
   , gameRacingTrack :: RacingTrack
   , gamePlayer      :: DynamicRoadObject
-  , gameTime        :: Float
+  , gameMetrics     :: OutrunGameMetrics
   , gameBackground  :: Picture
+  }
+
+data OutrunGameMetrics = Metrics
+  { gameInitialTime :: Float
+  , gameTrackLength :: Float
+  , gameTime        :: Float
+  , gameLaps        :: Int
   }

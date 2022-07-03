@@ -28,6 +28,9 @@ instance Semigroup RacingTrack where
 instance Monoid RacingTrack where
   mempty = RacingTrack []
 
+getTrackLength :: RacingTrack -> Float
+getTrackLength = sum . map roadLineLength . getTrack
+
 -- | Shifts the track by the given amount
 shiftTrack :: PointR3 -> [RoadLine] -> [RoadLine]
 shiftTrack delta = map (shiftRoadLinePosition delta)

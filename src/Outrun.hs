@@ -1,6 +1,7 @@
 module Outrun (module Outrun) where
 import           Fonts
 import           Graphics.Gloss
+import           Numeric
 import           Outrun.Building
 import           Outrun.Data
 import           Outrun.Data.Camera
@@ -44,24 +45,93 @@ drawGame screenRes segmentDrawers font state =
       translate 0 (ch/2 - 20) blackRect <>
       translate 0 (20 - ch/2) blackRect
 
+-- | Draw the stats of the game
 drawStats :: Font -> OutrunGameState -> Picture
-drawStats font (GameState _ cam track player _ _) =
-  speedometer
+drawStats font state =
+  speedometer <> timer <> lapsMeter
   where
+    player = gamePlayer state
+
+    metrics = gameMetrics state
+    initialTime = gameInitialTime metrics
+    time = gameTime metrics
+    laps = gameLaps metrics
+
+    -- Drawing a speedometer
     playerSpeed = round (snd (roadObjectVelocity player))
 
-    speedStyle = textWithFontExt font white 1 1 0.5
-    speedValue = speedStyle (show playerSpeed)
-    speedLabel = translate 24 0 (speedStyle "km/h")
-    speedTitle =
-      translate 0 10 (
-        textWithFontExt font afr32_cyan 1.51 1 1 "SPEED"
-      )
+    speedometer = translate 200 120 (scale 2 2 (
+      translate   25  (-10) speedLabel <>
+      translate (-25) (-10) speedValue <>
+      speedTitle))
+      where
+        draw = labelWithFont font
 
-    speedometer =
-      translate 150 100 $
-      scale 2 2 $
-      speedValue <> speedLabel <> speedTitle
+        speedValue = getLabel (draw (show playerSpeed))
+
+        speedLabel = getLabel (
+          labelAlignment
+            RightAlign
+            BottomAlign
+            (draw "km/h"))
+
+        speedTitle = getLabel (
+          labelAlignment
+            CenterAlign
+            BottomAlign
+            (labelWithFontExt font afr32_cyan 1.55 1 1 "SPEED"))
+
+    -- Drawing a timer
+    timer = translate 0 120 (scale 2 2 (timerTitle <> timerValue))
+      where
+        draw = labelWithFontExt font afr32_turmeric
+
+        timerTitle = getLabel (
+          labelAlignment
+            CenterAlign
+            BottomAlign
+            (draw 1.55 1 1 "TIME"))
+
+        timerValue = getLabel (
+          labelAlignment
+            CenterAlign
+            TopAlign
+            (draw scale scale 0.5 timeCounter))
+
+            where
+              countDown = (initialTime - time) < 10
+
+              scale = (fromIntegral (fromEnum countDown) + 2) / 2
+
+              timeCounter = showFFloat
+                ( Just (fromEnum countDown)
+                ) (initialTime - time) ""
+
+    -- Lap'o'meter
+    lapsMeter = translate (-200) 120 (scale 2 2 (
+      translate   25  (-10) lapsLabel <>
+      translate    0  (-10) lapsSlash <>
+      translate (-25) (-10) lapsValue <>
+      lapsTitle))
+      where
+        draw = labelWithFontExt font afr32_olive 1 1 0.5
+
+        lapsValue = getLabel (draw (show laps))
+
+        lapsSlash = getLabel
+          (labelAlignment CenterAlign BottomAlign (draw "/"))
+
+        lapsLabel = getLabel (
+          labelAlignment
+            RightAlign
+            BottomAlign
+            (draw "10"))
+
+        lapsTitle = getLabel (
+          labelAlignment
+            CenterAlign
+            BottomAlign
+            (labelWithFontExt font afr32_olive 1.55 1 1 "LAPS"))
 
 outrunPlay
   :: Picture
@@ -76,13 +146,13 @@ outrunPlay background screenRes font track =
     handleInput updateGame
 
   where
-    playerPic = translate 0 100 $ color afr32_red $ circle 200
-    player = Dynamic (RoadObject (0, 0, 1500) playerPic) (0, 0)
-
-    px = (getXR3 . roadObjectPosition . getRoadObject) player
+    player = Dynamic (RoadObject (0, 0, 1500) blank) (0, 0)
 
     initState =
-      GameState [] defaultCamera (infRacingTrack track) player 0 background
+      GameState []
+      defaultCamera (infRacingTrack track) player
+      (Metrics 70 (getTrackLength track) 0 1)
+      background
 
     terrainPic near far =
       drawTerrainSegment (600, 400) px
@@ -92,6 +162,7 @@ outrunPlay background screenRes font track =
         ) near far
       where
         index = roadLineIndex (fromProjected near)
+        px = (getXR3 . roadObjectPosition . getRoadObject) player
 
     roadSegment near far =
       drawRoadSegmentExt 1.2
@@ -112,7 +183,7 @@ sampleTrack :: RacingTrack
 sampleTrack = mconcat (
   map ($ trackRoadColors)
   [
-    addRoadObjectsTest . makeTrack LongTrack,
+    makeTrack LongTrack,
     addCurve Gently TurningRight . makeTrack LongTrack,
     makeTrack ShortTrack,
     addCurve Moderately TurningRight . makeTrack LongTrack,
@@ -132,12 +203,12 @@ sampleTrack = mconcat (
   where
     trackRoadColors = [ afr32_darkdorado ]
 
-addRoadObjectsTest :: RacingTrack -> RacingTrack
-addRoadObjectsTest = trackMapWith
+addRoadObjectsTest :: Picture -> RacingTrack -> RacingTrack
+addRoadObjectsTest pic = trackMapWith
   (\rl ->
     case roadLineIndex rl `mod` 10 of
       0 -> addRoadObject testObj rl
       _ -> rl
   )
   where
-    testObj = RoadObject (-2000, 250, 80) (rectangleSolid 500 500)
+    testObj = RoadObject (-2000, 250, 80) pic

@@ -20,7 +20,8 @@ afr32_white,
   afr32_olive,
   afr32_red,
   afr32_hippieblue,
-  afr32_cyan
+  afr32_cyan,
+  afr32_turmeric
   :: Color
 
 afr32_white      = makeColor8 236 235 231 255
@@ -31,3 +32,4 @@ afr32_olive      = makeColor8 118 119 29  255
 afr32_red        = makeColor8 176 34  34  255
 afr32_hippieblue = makeColor8 73  163 180 255
 afr32_cyan       = makeColor8 29  233 222 255
+afr32_turmeric   = makeColor8 211 189 70  255

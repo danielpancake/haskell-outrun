@@ -22,5 +22,5 @@ main = do
   outrunPlay
     (fromMaybe blank backgound)
     screenRes
-    (proccessFontColors [afr32_cyan] fontWaffle)
+    (proccessFontColors [afr32_olive, afr32_cyan, afr32_turmeric] fontWaffle)
     sampleTrack

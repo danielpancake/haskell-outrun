@@ -33,6 +33,7 @@ library
       Outrun.Data.Custom
       Outrun.Data.Defaults
       Outrun.Data.GameState
+      Outrun.Data.ImageLibrary
       Outrun.Data.Projected
       Outrun.Data.RacingTrack
       Outrun.Data.RoadLine
@@ -41,6 +42,7 @@ library
       Outrun.Projecting
       Outrun.Rendering
       Palettes
+      StackedRendering
       Utils
   other-modules:
       Paths_haskell_outrun

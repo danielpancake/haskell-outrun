@@ -11,22 +11,17 @@ bottomLeftOriginPic :: Int -> Int -> Picture -> Picture
 bottomLeftOriginPic w h =
   translate (fromIntegral w / 2) (fromIntegral h / 2)
 
--- | Converts Gloss.Color to PixelRGBA8
-colorToRGBA8 :: Color -> PixelRGBA8
-colorToRGBA8 color =
-  PixelRGBA8 (round r) (round g) (round b) (round a)
-  where
-    (r, g, b, a) = rgbaOfColor color
-
 -- | Multiplies two pixels by their values
-multiplyPixelRGBA8 :: PixelRGBA8 -> PixelRGBA8 -> PixelRGBA8
-multiplyPixelRGBA8 (PixelRGBA8 r1 g1 b1 a1) (PixelRGBA8 r2 g2 b2 a2) =
-  PixelRGBA8 (r1 * r2) (g1 * g2) (b1 * b2) (a1 * a2)
+multiplyPixelRGBA8 :: Color -> PixelRGBA8 -> PixelRGBA8
+multiplyPixelRGBA8 color (PixelRGBA8 r2 g2 b2 a2) =
+  PixelRGBA8 (f r1 r2) (f g1 g2) (f b1 b2) (f a1 a2)
+  where
+    (r1, g1, b1, a1) = rgbaOfColor color
+    f a b = round (a * fromIntegral b)
 
 -- | Multiplies an Image by solid color
 multiplyImageRGBA8 :: Color -> Image PixelRGBA8 -> Image PixelRGBA8
-multiplyImageRGBA8 color =
-  pixelMap (multiplyPixelRGBA8 (colorToRGBA8 color))
+multiplyImageRGBA8 = pixelMap . multiplyPixelRGBA8
 
 data Glyth = Glyth
   { glythWidth  :: Int
@@ -100,30 +95,62 @@ proccessFontColors colors =
     -- which will be imported in any case
     uniqueColors = nub (white : colors)
 
--- | Renders text with the given font
-textWithFont :: Font -> String -> Picture
-textWithFont font = textWithFontExt font white 1 1 0.5
+data Label = Label
+  { getLabel       :: Picture
+  , getLabelWidth  :: Float
+  , getLabelHeight :: Float
+  }
 
--- | Renders text with extra parameters
-textWithFontExt
+-- | Renders label with the given font
+labelWithFont :: Font -> String -> Label
+labelWithFont font = labelWithFontExt font white 1 1 0.5
+
+-- | Renders label with extra parameters
+labelWithFontExt
   :: Font
-  -> Color  -- Color of the text
+  -> Color  -- Color of the label
   -> Float  -- Font horizontal scale
   -> Float  -- Font vertical scale
   -> Float  -- Separation between characters
   -> String -- Text to render
-  -> Picture
-textWithFontExt font color xscale yscale sep =
-  scale xscale yscale .
-  foldr (
-    (\glyth otherGlyths ->
-      getGlythImg color glyth
-      <>
-      translate (fromIntegral (glythWidth glyth) + sep) 0 otherGlyths
-    ) . getGlyth font) blank
+  -> Label  -- Width and picture of the label
+labelWithFontExt font color xscale yscale sep string =
+  Label (scale xscale yscale rendered) width height
+  where
+    glyths = map (getGlyth font) string
+
+    widths  = map ((+sep) . fromIntegral . glythWidth) glyths
+    heights = map (fromIntegral . glythHeight) glyths
+
+    width  = sum widths * xscale
+    height = maximum heights * yscale
+
+    offsets = scanl (+) 0 widths
+
+    pics     = map (getGlythImg color) glyths
+    rendered = mconcat (zipWith (`translate` 0) offsets pics)
+
+data HorizontalAlign = LeftAlign | CenterAlign | RightAlign
+data VerticalAlign   = TopAlign  | MiddleAlign | BottomAlign
+
+labelAlignment :: HorizontalAlign -> VerticalAlign -> Label -> Label
+labelAlignment LeftAlign BottomAlign label = label
+labelAlignment halign valign (Label pic w h) =
+  Label (translate x y pic) w h
+  where
+    x = case halign of
+      LeftAlign   -> 0
+      CenterAlign -> -w / 2
+      RightAlign  -> -w
+
+    -- Gloss Picture are centered by default
+    y = case valign of
+      TopAlign    -> -h
+      MiddleAlign -> -h / 2
+      BottomAlign -> 0
 
 debugShowTextWithFont :: Font -> String -> IO ()
-debugShowTextWithFont font text =
-  display window (dark white) (textWithFont font text)
+debugShowTextWithFont font label =
+  display window (dark white) ((getLabel . labelWithFont font) label)
   where
-     window = InWindow "Debug -- text with font" (1024, 768) (0, 0)
+     window = InWindow "Debug -- label with font" (1024, 768) (0, 0)
