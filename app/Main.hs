@@ -9,6 +9,7 @@ main :: IO ()
 main = do
   resolution <- getScreenSize
 
+  arrow     <- loadSprite "./images/"  "right_arrow.png"
   backgound <- loadSprite "./images/" "background"
   cactus    <- loadSprite "./images/" "cactus"
   clouds    <- loadSprite "./images/" "clouds"
@@ -23,6 +24,6 @@ main = do
 
   outrunPlay
     resolution
-    [backgound, clouds, veh_suv, finish, cactus] 
+    [backgound, clouds, veh_suv]
     (proccessFontColors [afr32_olive, afr32_cyan, afr32_turmeric] fontWaffle)
-    (desertTrack [cactus, finish])
+    (desertTrack [arrow, cactus, finish])

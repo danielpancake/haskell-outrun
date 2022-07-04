@@ -2,6 +2,7 @@ module Outrun (module Outrun) where
 import           Data.Fixed
 import           Fonts
 import           Graphics.Gloss
+import           Graphics.Gloss.Interface.IO.Game
 import           Numeric
 import           Outrun.Building
 import           Outrun.Data
@@ -152,6 +153,25 @@ drawStats font state =
             BottomAlign
             (labelWithFontExt font afr32_olive 1.55 1 1 "LAPS"))
 
+type OutrunGame world
+  =  Display
+  -> Color
+  -> Int
+  -> world
+  -> (world -> Picture)
+  -> (Event -> world -> world)
+  -> (Float -> world -> world)
+  -> IO ()
+
+resettableGame :: OutrunGame OutrunGameState -> OutrunGame OutrunGameState
+resettableGame game display color fps initState drawGame eventHandler updateHandler =
+  game display color fps initState drawGame eventHandler resetHandler
+  where
+    resetHandler dt state =
+      if gameTime (gameMetrics state) > gameInitialTime (gameMetrics state)
+        then initState
+        else updateHandler dt state
+
 outrunPlay
   :: (Int, Int)
   -> AssetLibrary
@@ -160,9 +180,10 @@ outrunPlay
   -> IO ()
 outrunPlay resolution assets font track =
 
-  play FullScreen afr32_hippieblue 60 initState
-    (drawGame resolution [terrainPic, roadSegment] font)
-    handleInput updateGame
+  resettableGame
+    play FullScreen afr32_hippieblue 60 initState
+      (drawGame resolution [terrainPic, roadSegment] font)
+      handleInput updateGame
 
   where
     player = Dynamic (RoadObject (0, 0, 200) blank) (0, 0)
@@ -225,6 +246,8 @@ desertTrack assets = addCacti $
   where
     trackRoadColors = [ afr32_darkdorado ]
 
+    ((arrowW, arrowH), arrowPic) = fetchSpriteFromLibrary "right_arrow" assets
+
     ((finishW, finishH), finishPic) = fetchSpriteFromLibrary "finish" assets
     finishLine = RoadObject (0, 0, 0)
       (scale 20 20 (
@@ -241,10 +264,10 @@ desertTrack assets = addCacti $
         cactusPic
       ))
 
-    cactiDistribution rl = 2000 * (xx + off)
+    cactiDistribution rl = 3500 * (xx + off)
       where
         z  = getZR3 (roadLinePosition rl)
-        xx = sin z
+        xx = sin (z / 10)
 
         off = if xx < 0
           then -1
