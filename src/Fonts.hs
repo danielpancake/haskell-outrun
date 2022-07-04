@@ -5,11 +5,7 @@ import           Data.List
 import           Data.Maybe
 import           Graphics.Gloss
 import           Graphics.Gloss.Juicy
-
--- | Aligns a picture to its botton left corner
-bottomLeftOriginPic :: Int -> Int -> Picture -> Picture
-bottomLeftOriginPic w h =
-  translate (fromIntegral w / 2) (fromIntegral h / 2)
+import Outrun.Data.AssetLibrary
 
 -- | Multiplies two pixels by their values
 multiplyPixelRGBA8 :: Color -> PixelRGBA8 -> PixelRGBA8
@@ -47,13 +43,6 @@ getGlythImg color glyth = case lookup color colPics of
   where
     colPics = glythPic glyth
 
-loadImage :: FilePath -> IO (Maybe DynamicImage)
-loadImage filepath = do
-  img <- readImage filepath
-  return $ case img of
-    Left  _   -> Nothing
-    Right img -> Just img
-
 loadFont
   -- Font should be splitted into collection of files (*.png per character)
   -- Naming of the files should be following: "{fontname}{index}.png"
@@ -80,9 +69,12 @@ proccessGlythColors colors img =
     hh = imageHeight imgRGBA8
 
     pics = map (
-      (bottomLeftOriginPic ww hh . fromImageRGBA8)
+      (align ww hh . fromImageRGBA8)
       . (`multiplyImageRGBA8` imgRGBA8)
       ) colors
+    
+    align w h =
+      translate (fromIntegral w / 2) (fromIntegral h / 2)
 
 proccessFont :: RawFont -> Font
 proccessFont = proccessFontColors []
@@ -130,24 +122,10 @@ labelWithFontExt font color xscale yscale sep string =
     pics     = map (getGlythImg color) glyths
     rendered = mconcat (zipWith (`translate` 0) offsets pics)
 
-data HorizontalAlign = LeftAlign | CenterAlign | RightAlign
-data VerticalAlign   = TopAlign  | MiddleAlign | BottomAlign
-
 labelAlignment :: HorizontalAlign -> VerticalAlign -> Label -> Label
 labelAlignment LeftAlign BottomAlign label = label
 labelAlignment halign valign (Label pic w h) =
-  Label (translate x y pic) w h
-  where
-    x = case halign of
-      LeftAlign   -> 0
-      CenterAlign -> -w / 2
-      RightAlign  -> -w
-
-    -- Gloss Picture are centered by default
-    y = case valign of
-      TopAlign    -> -h
-      MiddleAlign -> -h / 2
-      BottomAlign -> 0
+  Label (pictureAlign halign valign w h pic) w h
 
 debugShowTextWithFont :: Font -> String -> IO ()
 debugShowTextWithFont font label =

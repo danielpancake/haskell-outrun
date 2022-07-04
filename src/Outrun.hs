@@ -1,5 +1,5 @@
 module Outrun (module Outrun) where
-import           Data.Maybe
+import           Data.Fixed
 import           Fonts
 import           Graphics.Gloss
 import           Numeric
@@ -7,6 +7,7 @@ import           Outrun.Building
 import           Outrun.Data
 import           Outrun.Data.AssetLibrary
 import           Outrun.Data.Camera
+import           Outrun.Data.Custom
 import           Outrun.Data.Defaults
 import           Outrun.Data.GameState
 import           Outrun.Data.Projected
@@ -26,7 +27,7 @@ drawGame
   -> Picture
 drawGame screenRes segmentDrawers font state =
   scale scaleFactor scaleFactor (
-    background <> game <> stats <> blackFrame
+    clouds <> background <> game <> stats <> blackFrame
   )
   where
     GameState assets _ cam track player _ = state
@@ -37,10 +38,24 @@ drawGame screenRes segmentDrawers font state =
 
     scaleFactor = sw / cw
 
-    backPic = getSprite (fetchSpriteFromLibrary "background" assets)
+    ((backW, backH), backPic) =
+      fetchSpriteFromLibrary "background" assets
 
     background = tripleStripPic cw (
-      translate (cameraParalax cam) 80 backPic)
+        translate (mod' (cameraParalax cam) (fromIntegral backW)) (-5)
+        (pictureAlign CenterAlign BottomAlign
+        (fromIntegral backW) (fromIntegral backH) backPic)
+      )
+
+    ((cloudsW, cloudsH), cloudsPic) =
+      fetchSpriteFromLibrary "clouds" assets
+
+    clouds = tripleStripPic cw (
+        translate (mod' (cameraParalax cam / 2) (fromIntegral cloudsW)) 50
+        (pictureAlign CenterAlign BottomAlign
+        (fromIntegral cloudsW) (fromIntegral cloudsH) cloudsPic)
+      )
+
     game  = drawRacingTrack cam segmentDrawers track [player]
     stats = drawStats font state
 
@@ -150,7 +165,7 @@ outrunPlay resolution assets font track =
     handleInput updateGame
 
   where
-    player = Dynamic (RoadObject (0, 0, 1500) blank) (0, 0)
+    player = Dynamic (RoadObject (0, 0, 200) blank) (0, 0)
 
     initState =
       GameState assets []
@@ -183,11 +198,14 @@ outrunPlay resolution assets font track =
       where
         index = roadLineIndex (fromProjected near)
 
-sampleTrack :: RacingTrack
-sampleTrack = mconcat (
-  map ($ trackRoadColors)
+desertTrack :: AssetLibrary -> RacingTrack
+desertTrack assets = addCacti $
+  mconcat ( map ($ trackRoadColors)
   [
-    makeTrack LongTrack,
+    makeTrackCustom (Custom 10),
+
+    trackMapWith (addRoadObject finishLine) . makeTrackCustom (Custom 1),
+
     addCurve Gently TurningRight . makeTrack LongTrack,
     makeTrack ShortTrack,
     addCurve Moderately TurningRight . makeTrack LongTrack,
@@ -207,12 +225,30 @@ sampleTrack = mconcat (
   where
     trackRoadColors = [ afr32_darkdorado ]
 
-addRoadObjectsTest :: Picture -> RacingTrack -> RacingTrack
-addRoadObjectsTest pic = trackMapWith
-  (\rl ->
-    case roadLineIndex rl `mod` 10 of
-      0 -> addRoadObject testObj rl
-      _ -> rl
-  )
-  where
-    testObj = RoadObject (-2000, 250, 80) pic
+    ((finishW, finishH), finishPic) = fetchSpriteFromLibrary "finish" assets
+    finishLine = RoadObject (0, 0, 0)
+      (scale 20 20 (
+        pictureAlign CenterAlign BottomAlign
+        (fromIntegral finishW) (fromIntegral finishH)
+        finishPic
+      ))
+
+    ((cactusW, cactusH), cactusPic) = fetchSpriteFromLibrary "cactus" assets
+    cactus xx = RoadObject (xx, 0, 0)
+      (scale 10 10 (
+        pictureAlign CenterAlign BottomAlign
+        (fromIntegral cactusW) (fromIntegral cactusH)
+        cactusPic
+      ))
+
+    cactiDistribution rl = 2000 * (xx + off)
+      where
+        z  = getZR3 (roadLinePosition rl)
+        xx = sin z
+
+        off = if xx < 0
+          then -1
+          else 1
+
+    addCacti = trackMapWith
+      (\rl -> addRoadObject (cactus (cactiDistribution rl)) rl)

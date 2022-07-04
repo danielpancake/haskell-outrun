@@ -26,6 +26,6 @@ defaultWindowResolution = (600, 400)
 defaultCamera :: Camera
 defaultCamera =
   Camera
-    (0, 500, 0)
+    (0, 350, 0)
     defaultWindowResolution
     0.325 100 0.8 0

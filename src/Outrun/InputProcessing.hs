@@ -10,6 +10,7 @@ import           Outrun.Data.GameState
 import           Outrun.Data.RacingTrack
 import           Outrun.Data.RoadLine
 import           Outrun.Data.RoadObject
+import           Outrun.Projecting
 import           StackedRendering
 import           Utils
 
@@ -38,7 +39,7 @@ updateGame dt state = updatedGameState
     Metrics _ trackLength time currentLap = metrics
 
     (cx, cy, cz) = cameraPosition cam
-    (px, __, pz) = roadObjectPosition player
+    (px, py, pz) = roadObjectPosition player
 
     -- Drop all lines behind the camera
     updateTrack = dropWhile ((< cz) . getZR3 . roadLinePosition)
@@ -52,8 +53,7 @@ updateGame dt state = updatedGameState
     cdz = (pz - cameraZOffset - cz) * cameraSmoothness
 
     updateCamera = shiftCameraPosition (cdx, cdy, cdz) .
-      setCameraParalax (mod' (cameraParalax cam - centrifugalForce / 50 - spdX / 100) 600)
-      -- Kinda bad way to make a parallax but whatever
+      setCameraParalax (cameraParalax cam - centrifugalForce / 50 - spdX / 100)
 
     -- Update player position
     horizBound =
@@ -123,32 +123,14 @@ updateGame dt state = updatedGameState
     spdZ' = max 0 (approachSmooth spdZ ddz acc - hillRate * friction)
     ------- ^^^ prohibits player from going backwards
 
-    wheel = rectangleSolid 8 12 <> rectangleSolid 10 10 <>
-      translate 0 (mod' (50 * time * spdZRatio) 5 - 2.5) (
-      color (light black) (rectangleSolid 10 5))
+    ((_, ddy1), dscale1) = project cam (px, py, pz)
+    ((_, ddy2), dscale2) = project cam (px, py, pz + 32)
 
-    pairOfWheels = translate (-25) 0 wheel <> translate 25 0 wheel
+    ((suvW, suvH), suvPic) = fetchAnimationFromLibrary "veh_suv" assets
 
-    ramp = rotate (10*spdXRatio) (rectangleSolid 50 8)
-
-    frontWheels = scale 0.75 0.75 (
-      translate (50*spdXRatio) 8 (
-        pairOfWheels
-        <> color (dark $ dark red) ramp
-      ))
-
-    spoiler = rotate (10*spdXRatio) (
-        color (dark red) (rectangleSolid 30 10))
-        <>
-        translate 0 5 (color (light black) (rectangleSolid 3 10))
-        <>
-        translate 0 10 (color red (rectangleSolid 30 5))
-
-    playerPic = translate 0 15 (
-      drawStacked (-spdXRatio) (-0.2) (
-      getAnimation (fetchAnimationFromLibrary "veh_suv" assets)))
-
-      --translate 0 10 (frontWheels <> color red ramp <> pairOfWheels <> spoiler)
+    playerPic = pictureAlign CenterAlign BottomAlign
+      (fromIntegral suvW) (fromIntegral suvH)
+      (drawStacked (spdXRatio * 2) ((ddy2 - ddy1) / 64) suvPic)
 
     player' = player { roadObjectPicture = scale 15 15 playerPic }
 
