@@ -6,13 +6,15 @@ import           Graphics.Gloss
 import           Graphics.Gloss.Interface.Environment
 import           Graphics.Gloss.Juicy
 import           Outrun
+import           Outrun.Data.AssetLibrary
 import           Palettes
 
 main :: IO ()
 main = do
-  screenRes <- getScreenSize
+  resolution <- getScreenSize
 
-  backgound <- loadJuicyPNG "./images/background.png"
+  backgound <- loadSprite "./images/" "background"
+  veh_suv   <- loadAnimation "./images/suv/" "veh_suv" 32
 
   fontWaffle <- loadFont
     "./images/fontWaffle/"
@@ -20,7 +22,7 @@ main = do
     "!#\"?&'(),-./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ[]abcdefghijklmnopqrstuvwxyz "
 
   outrunPlay
-    (fromMaybe blank backgound)
-    screenRes
+    resolution
+    [backgound, veh_suv]
     (proccessFontColors [afr32_olive, afr32_cyan, afr32_turmeric] fontWaffle)
     sampleTrack

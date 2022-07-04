@@ -1,0 +1,3 @@
+# Licensing
+Voxel SUV model is licensed under Creative Commons Attribution 4.0 International.
+Model by Mike Judge (https://github.com/mikelovesrobots/mmmm)

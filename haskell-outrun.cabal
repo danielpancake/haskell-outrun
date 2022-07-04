@@ -29,11 +29,11 @@ library
       Outrun
       Outrun.Building
       Outrun.Data
+      Outrun.Data.AssetLibrary
       Outrun.Data.Camera
       Outrun.Data.Custom
       Outrun.Data.Defaults
       Outrun.Data.GameState
-      Outrun.Data.ImageLibrary
       Outrun.Data.Projected
       Outrun.Data.RacingTrack
       Outrun.Data.RoadLine

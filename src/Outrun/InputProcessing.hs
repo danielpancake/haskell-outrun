@@ -3,12 +3,14 @@ import           Data.Fixed
 import           Data.List
 import           Graphics.Gloss.Interface.IO.Game
 import           Outrun.Data
+import           Outrun.Data.AssetLibrary
 import           Outrun.Data.Camera
 import           Outrun.Data.Defaults
 import           Outrun.Data.GameState
 import           Outrun.Data.RacingTrack
 import           Outrun.Data.RoadLine
 import           Outrun.Data.RoadObject
+import           StackedRendering
 import           Utils
 
 
@@ -32,7 +34,7 @@ updateGame :: Float -> OutrunGameState -> OutrunGameState
 updateGame dt state = updatedGameState
   where
     -- Unpacking the state
-    GameState pressedkeys cam track (Dynamic player (spdX, spdZ)) metrics _ = state
+    GameState assets pressedkeys cam track (Dynamic player (spdX, spdZ)) metrics = state
     Metrics _ trackLength time currentLap = metrics
 
     (cx, cy, cz) = cameraPosition cam
@@ -42,7 +44,7 @@ updateGame dt state = updatedGameState
     updateTrack = dropWhile ((< cz) . getZR3 . roadLinePosition)
 
     -- Update camera position
-    cameraSmoothness = 0.5
+    cameraSmoothness = 0.85
     cameraZOffset = 300
 
     cdx = (px - cx) * cameraSmoothness
@@ -142,9 +144,13 @@ updateGame dt state = updatedGameState
         <>
         translate 0 10 (color red (rectangleSolid 30 5))
 
-    playerPic = translate 0 10 (frontWheels <> color red ramp <> pairOfWheels <> spoiler)
+    playerPic = translate 0 15 (
+      drawStacked (-spdXRatio) (-0.2) (
+      getAnimation (fetchAnimationFromLibrary "veh_suv" assets)))
 
-    player' = player { roadObjectPicture = scale 10 10 playerPic }
+      --translate 0 10 (frontWheels <> color red ramp <> pairOfWheels <> spoiler)
+
+    player' = player { roadObjectPicture = scale 15 15 playerPic }
 
     afterUpdateLap = ceiling (pz / gameTrackLength metrics)
 

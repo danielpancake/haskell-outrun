@@ -1,9 +1,11 @@
 module Outrun (module Outrun) where
+import           Data.Maybe
 import           Fonts
 import           Graphics.Gloss
 import           Numeric
 import           Outrun.Building
 import           Outrun.Data
+import           Outrun.Data.AssetLibrary
 import           Outrun.Data.Camera
 import           Outrun.Data.Defaults
 import           Outrun.Data.GameState
@@ -24,10 +26,10 @@ drawGame
   -> Picture
 drawGame screenRes segmentDrawers font state =
   scale scaleFactor scaleFactor (
-    back <> game <> stats <> blackFrame
+    background <> game <> stats <> blackFrame
   )
   where
-    GameState _ cam track player _ background = state
+    GameState assets _ cam track player _ = state
     cameraRes = cameraResolution cam
 
     (cw, ch)   = fromIntegralPair cameraRes
@@ -35,8 +37,10 @@ drawGame screenRes segmentDrawers font state =
 
     scaleFactor = sw / cw
 
-    back = tripleStripPic cw (
-      translate (cameraParalax cam) 80 background)
+    backPic = getSprite (fetchSpriteFromLibrary "background" assets)
+
+    background = tripleStripPic cw (
+      translate (cameraParalax cam) 80 backPic)
     game  = drawRacingTrack cam segmentDrawers track [player]
     stats = drawStats font state
 
@@ -134,25 +138,25 @@ drawStats font state =
             (labelWithFontExt font afr32_olive 1.55 1 1 "LAPS"))
 
 outrunPlay
-  :: Picture
-  -> (Int, Int)
+  :: (Int, Int)
+  -> AssetLibrary
   -> Font
   -> RacingTrack
   -> IO ()
-outrunPlay background screenRes font track =
+outrunPlay resolution assets font track =
 
   play FullScreen afr32_hippieblue 60 initState
-    (drawGame screenRes [terrainPic, roadSegment] font)
+    (drawGame resolution [terrainPic, roadSegment] font)
     handleInput updateGame
 
   where
     player = Dynamic (RoadObject (0, 0, 1500) blank) (0, 0)
 
     initState =
-      GameState []
-      defaultCamera (infRacingTrack track) player
+      GameState assets []
+      defaultCamera (infRacingTrack track)
+      player
       (Metrics 70 (getTrackLength track) 0 1)
-      background
 
     terrainPic near far =
       drawTerrainSegment (600, 400) px
