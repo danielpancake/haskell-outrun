@@ -1,6 +1,5 @@
 module Outrun.Data.AssetLibrary (module Outrun.Data.AssetLibrary) where
 import           Codec.Picture
-import           Data.Maybe
 import           Graphics.Gloss
 import           Graphics.Gloss.Juicy
 
@@ -18,10 +17,20 @@ fetchSpriteFromLibrary name lib = case lookup name lib of
   Just (Sprite asset) -> asset
   _                   -> error ("Could not find sprite " ++ name ++ " in library")
 
+fetchSpriteFromLibraryF :: String -> AssetLibrary -> ((Float, Float), Picture)
+fetchSpriteFromLibraryF name lib = case lookup name lib of
+  Just (Sprite ((w, h), pic)) -> ((fromIntegral w, fromIntegral h), pic)
+  _                           -> error ("Could not find sprite " ++ name ++ " in library")
+
 fetchAnimationFromLibrary :: String -> AssetLibrary -> ((Int, Int), [Picture])
 fetchAnimationFromLibrary name lib = case lookup name lib of
   Just (Animation asset) -> asset
   _                      -> error ("Could not find animation " ++ name ++ " in library")
+
+fetchAnimationFromLibraryF :: String -> AssetLibrary -> ((Float, Float), [Picture])
+fetchAnimationFromLibraryF name lib = case lookup name lib of
+  Just (Animation ((w, h), pic)) -> ((fromIntegral w, fromIntegral h), pic)
+  _                              -> error ("Could not find animation " ++ name ++ " in library")
 
 loadImage :: FilePath -> IO (Maybe DynamicImage)
 loadImage filepath = do

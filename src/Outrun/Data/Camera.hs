@@ -2,15 +2,15 @@ module Outrun.Data.Camera (module Outrun.Data.Camera) where
 import           Outrun.Data
 
 data Camera = Camera
-  { cameraPosition       :: PointR3    -- Position in world space
-  , cameraResolution     :: (Int, Int) -- Camera resolution
-  , cameraDepth          :: Float      -- Camera depth. Basically, has
+  { cameraPosition       :: PointR3    -- ^ Position in world space.
+  , cameraResolution     :: (Int, Int) -- ^ Camera resolution
+  , cameraDepth          :: Float      -- ^ Camera depth. Basically, has
     -- an inversely proportional relation to FOV. May be increased while
     -- moving up, decreased while moving down for the accelerating effect
 
-  , cameraRenderDistance :: Int   -- Render distance
-  , cameraSmoothness     :: Float -- How fast camera moves towards target position
-  , cameraParalax        :: Float -- Paralax value. Offset of the background
+  , cameraRenderDistance :: Int   -- ^ Render distance
+  , cameraSmoothness     :: Float -- ^ How fast camera moves towards target position
+  , cameraParallax        :: Float -- ^ Parallax value. Offset of the background
     -- Should be increased when turning right, decreased when turning left
   }
 
@@ -23,8 +23,8 @@ setCameraDepth d cam = cam { cameraDepth = d }
 setRenderDistance :: Int -> Camera -> Camera
 setRenderDistance d cam = cam { cameraRenderDistance = d }
 
-setCameraParalax :: Float -> Camera -> Camera
-setCameraParalax p cam = cam { cameraParalax = p }
+setCameraParallax :: Float -> Camera -> Camera
+setCameraParallax p cam = cam { cameraParallax = p }
 
 shiftCameraPosition :: PointR3 -> Camera -> Camera
 shiftCameraPosition delta cam =
@@ -32,8 +32,8 @@ shiftCameraPosition delta cam =
   where
     pos = shiftPos3D (cameraPosition cam) delta
 
-shiftCameraParalax :: Float -> Camera -> Camera
-shiftCameraParalax delta cam =
-  setCameraParalax parallax cam
+shiftCameraParallax :: Float -> Camera -> Camera
+shiftCameraParallax delta cam =
+  setCameraParallax parallax cam
   where
-    parallax = cameraParalax cam + delta
+    parallax = cameraParallax cam + delta

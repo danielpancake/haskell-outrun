@@ -120,10 +120,21 @@ drawRacingTrack cam segmentDrawers track roadObjs =
         dynamicObjs =
           map getRoadObject (objsBetween near far)
 
+        -- Draw only those objects that are in the viewport
+        filteredObjs =
+          filter (\obj ->
+            getXR2 (projectedPosition obj) `inRangeOf` (-halfCW, halfCW))
+          where
+            halfCW = fromIntegral (fst (cameraResolution cam)) / 2 + off
+            off = 100
+
         -- Drawing all road objects between two road lines
-        drawnRoadObjects = pictures (map
-          ( drawProjectedObject . projectRoadObject near far)
-          ( staticObjs ++ dynamicObjs))
+        drawnRoadObjects = pictures (
+            map drawProjectedObject
+              ( filteredObjs -- Draw only objects in the camera view
+              ( map (projectRoadObject near far)
+              ( staticObjs ++ dynamicObjs)))
+          )
 
 -- | Makes a triple strip from the image
 tripleStripPic :: Float -> Picture -> Picture
@@ -131,5 +142,5 @@ tripleStripPic off pic =
   pictures [
     translate (-off) 0 pic,
     pic,
-    translate 0 off pic
+    translate off 0 pic
   ]

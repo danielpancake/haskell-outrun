@@ -1,5 +1,4 @@
 module Outrun.InputProcessing (module Outrun.InputProcessing) where
-import           Data.Fixed
 import           Data.List
 import           Graphics.Gloss.Interface.IO.Game
 import           Outrun.Data
@@ -13,7 +12,6 @@ import           Outrun.Data.RoadObject
 import           Outrun.Projecting
 import           StackedRendering
 import           Utils
-
 
 -- | Stores a list of the pressed keys
 keyboardInput :: Event -> [Key] -> [Key]
@@ -31,6 +29,7 @@ handleInput ev state = case ev of
   EventKey key _ _ _ -> state { gameInput = keyboardInput ev (gameInput state) }
   _                  -> state -- No change
 
+-- | Updates the gam state
 updateGame :: Float -> OutrunGameState -> OutrunGameState
 updateGame dt state = updatedGameState
   where
@@ -41,19 +40,22 @@ updateGame dt state = updatedGameState
     (cx, cy, cz) = cameraPosition cam
     (px, py, pz) = roadObjectPosition player
 
+    -- Updating the number of laps completed
+    gameLapsUpdated = ceiling (pz / gameTrackLength metrics)
+
     -- Drop all lines behind the camera
     updateTrack = dropWhile ((< cz) . getZR3 . roadLinePosition)
 
     -- Update camera position
-    cameraSmoothness = 0.85
-    cameraZOffset = 300
+    camSmoothness = cameraSmoothness cam 
+    camZOffset = 300
 
-    cdx = (px - cx) * cameraSmoothness
+    cdx = (px - cx) * camSmoothness
     cdy = 0
-    cdz = (pz - cameraZOffset - cz) * cameraSmoothness
+    cdz = (pz - camZOffset - cz) * camSmoothness
 
     updateCamera = shiftCameraPosition (cdx, cdy, cdz) .
-      setCameraParalax (cameraParalax cam - centrifugalForce / 50 - spdX / 100)
+      setCameraParallax (cameraParallax cam - centrifugalForce / 50 - spdX / 100)
 
     -- Update player position
     horizBound =
@@ -123,26 +125,34 @@ updateGame dt state = updatedGameState
     spdZ' = max 0 (approachSmooth spdZ ddz acc - hillRate * friction)
     ------- ^^^ prohibits player from going backwards
 
-    ((_, ddy1), dscale1) = project cam (px, py, pz)
-    ((_, ddy2), dscale2) = project cam (px, py, pz + 32)
+    -- Drawing player SUV
+    playerPic =
+      drawStackedExt
+        spdXRatio deltaY
+        deltaScale scaleFactor
+        (map (pictureAlign CenterAlign BottomAlign suvW' suvH') suvPic)
+      where
+        ((suvW, suvH), suvPic) = fetchAnimationFromLibrary "veh_suv" assets
+        suvW' = fromIntegral suvW
+        suvH' = fromIntegral suvH
 
-    ((suvW, suvH), suvPic) = fetchAnimationFromLibrary "veh_suv" assets
+        scaleFactor = 15
 
-    playerPic = pictureAlign CenterAlign BottomAlign
-      (fromIntegral suvW) (fromIntegral suvH)
-      (drawStacked (spdXRatio * 2) ((ddy2 - ddy1) / 64) suvPic)
+        ((_, yy1), dscale1) = project cam (px, py, pz)
+        ((_, yy2), dscale2) = project cam (px, py, pz + 32 * scaleFactor)
 
-    player' = player { roadObjectPicture = scale 15 15 playerPic }
+        deltaScale = (1 - (dscale2 / dscale1)) / 32
+        deltaY = (yy2 - yy1) / (32 * scaleFactor)
 
-    afterUpdateLap = ceiling (pz / gameTrackLength metrics)
+    player' = player { roadObjectPicture = playerPic }
 
     updatedGameState = state
       { gameCamera      = updateCamera cam
       , gameRacingTrack = trackMap updateTrack track
       , gameMetrics     = metrics
-        { gameTime = time + dt - if currentLap < afterUpdateLap
+        { gameTime = time + dt - if currentLap < gameLapsUpdated
           then 60 else 0
-        , gameLaps = afterUpdateLap
+        , gameLaps = gameLapsUpdated
         }
       , gamePlayer =
         Dynamic (updatePosition player') (spdX', spdZ')

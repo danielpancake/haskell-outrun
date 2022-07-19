@@ -1,14 +1,25 @@
 module StackedRendering (module StackedRendering) where
-import           Graphics.Gloss.Data.Picture
+import Graphics.Gloss.Data.Picture
 
-drawStacked :: Float -> Float -> [Picture] -> Picture
-drawStacked dx dy pics = mconcat picsWithOffsets
+drawStacked :: [Picture] -> Picture
+drawStacked = drawStackedExt 0 0 1 0
+
+drawStackedExt
+  :: Float
+  -> Float
+  -> Float
+  -> Float
+  -> [Picture] -> Picture
+drawStackedExt dx dy dscale scaleFactor pics = mconcat picsWithOffsets
   where
     len = length pics
     offsets = reverse (
-        scanl (\(a,b) (c,d) -> (a+c,b+d)) (0, 0)
-        (replicate len (dx, dy))
-      )
+        scanl (\(a,b,c) (d,e,f) -> (a+d,b+e,c+f))
+        (0, 0, scaleFactor)
+        (replicate len (dx, dy, -dscale)))
 
     picsWithOffsets =
-      zipWith (curry (\(p, (x, y)) -> scale (1 - y / 10) (1 - y / 10) (translate x y p))) pics offsets
+      zipWith (curry (\(pic, (x, y, s)) ->
+          scale s s
+          (translate x y pic)
+        )) pics offsets

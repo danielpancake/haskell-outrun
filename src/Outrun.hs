@@ -34,27 +34,31 @@ drawGame screenRes segmentDrawers font state =
     GameState assets _ cam track player _ = state
     cameraRes = cameraResolution cam
 
-    (cw, ch)   = fromIntegralPair cameraRes
-    (sw, __)   = fromIntegralPair screenRes
+    (cw, ch) = fromIntegralPair cameraRes
+    (sw, __) = fromIntegralPair screenRes
 
     scaleFactor = sw / cw
 
     ((backW, backH), backPic) =
-      fetchSpriteFromLibrary "background" assets
+      fetchSpriteFromLibraryF "background" assets
 
-    background = tripleStripPic cw (
-        translate (mod' (cameraParalax cam) (fromIntegral backW)) (-5)
-        (pictureAlign CenterAlign BottomAlign
-        (fromIntegral backW) (fromIntegral backH) backPic)
+    background = translate (mod' (cameraParallax cam) cw) (-5)
+      (tripleStripPic cw
+        (
+          pictureAlign CenterAlign BottomAlign
+          backW backH backPic
+        )
       )
 
     ((cloudsW, cloudsH), cloudsPic) =
-      fetchSpriteFromLibrary "clouds" assets
-
-    clouds = tripleStripPic cw (
-        translate (mod' (cameraParalax cam / 2) (fromIntegral cloudsW)) 50
-        (pictureAlign CenterAlign BottomAlign
-        (fromIntegral cloudsW) (fromIntegral cloudsH) cloudsPic)
+      fetchSpriteFromLibraryF "clouds" assets
+    
+    clouds = translate (mod' (cameraParallax cam / 2) cw) 50
+      (tripleStripPic cw
+        (
+          pictureAlign CenterAlign BottomAlign
+          cloudsW cloudsH cloudsPic
+        )
       )
 
     game  = drawRacingTrack cam segmentDrawers track [player]
@@ -225,28 +229,53 @@ desertTrack assets = addCacti $
   [
     makeTrackCustom (Custom 10),
 
-    trackMapWith (addRoadObject finishLine) . makeTrackCustom (Custom 1),
+    trackMapWith (addRoadObject finishLine) . oneLiner,
 
+    rightTurn,
     addCurve Gently TurningRight . makeTrack LongTrack,
     makeTrack ShortTrack,
+    rightTurn,
     addCurve Moderately TurningRight . makeTrack LongTrack,
+    leftTurn,
     addCurve Moderately TurningLeft . makeTrack ShortTrack,
+    rightTurn,
     addCurve Moderately TurningRight . makeTrack ShortTrack,
     makeTrack NormalTrack,
+    rightTurn,
     addCurve Moderately TurningRight . makeTrack NormalTrack,
+    leftTurn,
     addCurve Gently TurningLeft . makeTrack ShortTrack,
     makeTrack NormalTrack,
+    rightTurn,
     addCurve Moderately TurningRight . makeTrack NormalTrack,
+    leftTurn,
     addCurve Moderately TurningLeft . makeTrack ShortTrack,
+    rightTurn,
     addCurve Moderately TurningRight . makeTrack ShortTrack,
+    leftTurn,
     addCurve Moderately TurningLeft . makeTrack ShortTrack,
     makeTrack ShortTrack,
+    rightTurn,
     addCurve Steeply TurningRight . makeTrack ShortTrack
   ])
   where
     trackRoadColors = [ afr32_darkdorado ]
 
+    oneLiner = makeTrackCustom (Custom 1)
+    rightTurn = trackMapWith (addRoadObject arrowRight) . oneLiner
+    leftTurn = trackMapWith (addRoadObject arrowLeft) . oneLiner
+
     ((arrowW, arrowH), arrowPic) = fetchSpriteFromLibrary "right_arrow" assets
+
+    arrowRight = RoadObject (2500, 0, 0)
+      (pictureAlign CenterAlign BottomAlign
+      (fromIntegral arrowW) (fromIntegral arrowH)
+      (scale 20 20 arrowPic))
+
+    arrowLeft = RoadObject (-2500, 0, 0)
+      (pictureAlign CenterAlign BottomAlign
+      (fromIntegral arrowW) (fromIntegral arrowH)
+      (scale (-20) 20 arrowPic))
 
     ((finishW, finishH), finishPic) = fetchSpriteFromLibrary "finish" assets
     finishLine = RoadObject (0, 0, 0)
@@ -267,7 +296,7 @@ desertTrack assets = addCacti $
     cactiDistribution rl = 3500 * (xx + off)
       where
         z  = getZR3 (roadLinePosition rl)
-        xx = sin (z / 10)
+        xx = 3 * sin (z / 10)
 
         off = if xx < 0
           then -1

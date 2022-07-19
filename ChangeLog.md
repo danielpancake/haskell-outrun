@@ -14,4 +14,5 @@
           Fixed improper used of pitch value
 0.2.8.0 - Added parallax scrolling
 
-0.3.1.0 - Refactored project architecture (again)
+0.3.1.0 - Refactored project architecture
+0.3.2.0 - Fixed parallax scrolling, fixed model rendering
