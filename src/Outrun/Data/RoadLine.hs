@@ -89,9 +89,9 @@ trackCurveValue curve = case curve of
 
 trackPitchValue :: TrackChangeRate -> Float
 trackPitchValue pitch = case pitch of
-  Gently     -> 5
-  Moderately -> 8
-  Steeply    -> 10
+  Gently     -> 0.5
+  Moderately -> 1
+  Steeply    -> 3
 
 trackCurveDir :: Num a => TrackCurveDirection -> (a -> a)
 trackCurveDir dir = case dir of

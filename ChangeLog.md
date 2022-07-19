@@ -16,3 +16,4 @@
 
 0.3.1.0 - Refactored project architecture
 0.3.2.0 - Fixed parallax scrolling, fixed model rendering
+0.3.2.2 - Fixed parallax and road object projection with hills 

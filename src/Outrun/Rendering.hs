@@ -114,7 +114,9 @@ drawRacingTrack cam segmentDrawers track roadObjs =
 
         -- Projecting static objects
         staticObjs =
-          map (shiftRoadObject (getPos near)) (roadObjects (fromProjected near))
+          map (shiftRoadObject (0, 0, zz)) (roadObjects (fromProjected near))
+          where
+            (_, _, zz) = getPos near
 
         -- Projecting dynamic objects
         dynamicObjs =

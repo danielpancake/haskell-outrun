@@ -5,7 +5,7 @@ cabal-version: 1.12
 -- see: https://github.com/sol/hpack
 
 name:           haskell-outrun
-version:        0.3.2.0
+version:        0.3.2.2
 description:    OutRun clone game made in Haskell
 homepage:       https://github.com/danielpancake/haskell-outrun#readme
 bug-reports:    https://github.com/danielpancake/haskell-outrun/issues

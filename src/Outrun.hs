@@ -1,5 +1,6 @@
 module Outrun (module Outrun) where
 import           Data.Fixed
+import           Data.Maybe
 import           Fonts
 import           Graphics.Gloss
 import           Graphics.Gloss.Interface.IO.Game
@@ -16,6 +17,7 @@ import           Outrun.Data.RacingTrack
 import           Outrun.Data.RoadLine
 import           Outrun.Data.RoadObject
 import           Outrun.InputProcessing
+import           Outrun.Projecting
 import           Outrun.Rendering
 import           Palettes
 import           Utils
@@ -33,6 +35,7 @@ drawGame screenRes segmentDrawers font state =
   where
     GameState assets _ cam track player _ = state
     cameraRes = cameraResolution cam
+    cameraRendDist = cameraRenderDistance cam
 
     (cw, ch) = fromIntegralPair cameraRes
     (sw, __) = fromIntegralPair screenRes
@@ -42,24 +45,32 @@ drawGame screenRes segmentDrawers font state =
     ((backW, backH), backPic) =
       fetchSpriteFromLibraryF "background" assets
 
-    background = translate (mod' (cameraParallax cam) cw) (-5)
-      (tripleStripPic cw
-        (
-          pictureAlign CenterAlign BottomAlign
-          backW backH backPic
-        )
-      )
+    background =
+      translate (mod' (cameraParallax cam) cw) (lastRoadlineY - 5)
+      ( tripleStripPic cw
+      ( pictureAlign CenterAlign BottomAlign
+        backW backH backPic))
+      where
+        (lastRoadlineWorldY, _) =
+          foldl (\(dy, ddy) pitch -> (dy + ddy, ddy + pitch))
+          (0, 0)
+          (map roadLinePitchRate (take cameraRendDist (getTrack track)))
+
+        lastRoadline = nthRoadLineMaybe cameraRendDist track
+        lastRoadlineY = getYR2
+          ( projectedPosition
+          ( projectRoadLine cam
+          ( shiftRoadLinePosition (0, lastRoadlineWorldY, 0)
+          ( fromMaybe defaultRoadLine lastRoadline))))
 
     ((cloudsW, cloudsH), cloudsPic) =
       fetchSpriteFromLibraryF "clouds" assets
     
-    clouds = translate (mod' (cameraParallax cam / 2) cw) 50
-      (tripleStripPic cw
-        (
-          pictureAlign CenterAlign BottomAlign
-          cloudsW cloudsH cloudsPic
-        )
-      )
+    clouds =
+      translate (mod' (cameraParallax cam / 2) cw) 50
+      ( tripleStripPic cw
+      ( pictureAlign CenterAlign BottomAlign
+        cloudsW cloudsH cloudsPic))
 
     game  = drawRacingTrack cam segmentDrawers track [player]
     stats = drawStats font state
@@ -240,6 +251,9 @@ desertTrack assets = addCacti $
     addCurve Moderately TurningLeft . makeTrack ShortTrack,
     rightTurn,
     addCurve Moderately TurningRight . makeTrack ShortTrack,
+
+    addHill Moderately GoingUp . makeTrack NormalTrack,
+
     makeTrack NormalTrack,
     rightTurn,
     addCurve Moderately TurningRight . makeTrack NormalTrack,
@@ -250,6 +264,9 @@ desertTrack assets = addCacti $
     addCurve Moderately TurningRight . makeTrack NormalTrack,
     leftTurn,
     addCurve Moderately TurningLeft . makeTrack ShortTrack,
+
+    addHill Moderately GoingDown . makeTrack NormalTrack,
+
     rightTurn,
     addCurve Moderately TurningRight . makeTrack ShortTrack,
     leftTurn,
@@ -265,31 +282,35 @@ desertTrack assets = addCacti $
     rightTurn = trackMapWith (addRoadObject arrowRight) . oneLiner
     leftTurn = trackMapWith (addRoadObject arrowLeft) . oneLiner
 
-    ((arrowW, arrowH), arrowPic) = fetchSpriteFromLibrary "right_arrow" assets
+    ((arrowW, arrowH), arrowPic) = fetchSpriteFromLibraryF "right_arrow" assets
 
     arrowRight = RoadObject (2500, 0, 0)
-      (pictureAlign CenterAlign BottomAlign
-      (fromIntegral arrowW) (fromIntegral arrowH)
+      (pictureAlign
+      CenterAlign BottomAlign
+      arrowW arrowH
       (scale 20 20 arrowPic))
 
     arrowLeft = RoadObject (-2500, 0, 0)
-      (pictureAlign CenterAlign BottomAlign
-      (fromIntegral arrowW) (fromIntegral arrowH)
+      (pictureAlign
+      CenterAlign BottomAlign
+      arrowW arrowH
       (scale (-20) 20 arrowPic))
 
-    ((finishW, finishH), finishPic) = fetchSpriteFromLibrary "finish" assets
+    ((finishW, finishH), finishPic) = fetchSpriteFromLibraryF "finish" assets
     finishLine = RoadObject (0, 0, 0)
       (scale 20 20 (
-        pictureAlign CenterAlign BottomAlign
-        (fromIntegral finishW) (fromIntegral finishH)
+        pictureAlign
+        CenterAlign BottomAlign
+        finishW finishH
         finishPic
       ))
 
-    ((cactusW, cactusH), cactusPic) = fetchSpriteFromLibrary "cactus" assets
-    cactus xx = RoadObject (xx, 0, 0)
+    ((cactusW, cactusH), cactusPic) = fetchSpriteFromLibraryF "cactus" assets
+    cactus = RoadObject (0, 0, 0)
       (scale 10 10 (
-        pictureAlign CenterAlign BottomAlign
-        (fromIntegral cactusW) (fromIntegral cactusH)
+        pictureAlign
+        CenterAlign BottomAlign
+        cactusW cactusH
         cactusPic
       ))
 
@@ -303,4 +324,5 @@ desertTrack assets = addCacti $
           else 1
 
     addCacti = trackMapWith
-      (\rl -> addRoadObject (cactus (cactiDistribution rl)) rl)
+      (\rl -> addRoadObject
+        (shiftRoadObject (cactiDistribution rl, 0, 0) cactus) rl)

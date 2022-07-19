@@ -37,3 +37,9 @@ shiftTrack delta = map (shiftRoadLinePosition delta)
 
 shiftTrackIndices :: Int -> [RoadLine] -> [RoadLine]
 shiftTrackIndices delta = map (shiftRoadLineIndex delta)
+
+nthRoadLineMaybe :: Int -> RacingTrack -> Maybe RoadLine
+nthRoadLineMaybe n track =
+  case drop (n - 1) (getTrack track) of
+    []    -> Nothing
+    (r:_) -> Just r
