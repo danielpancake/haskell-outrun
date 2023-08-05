@@ -3,8 +3,8 @@ version:             0.3.2.2
 github:              "danielpancake/haskell-outrun"
 license:             BSD3
 author:              "danielpancake and Leon Parepko"
-maintainer:          "d.satarov@innopolis.university"
-copyright:           "2022 danielpancake & Leon Parepko"
+maintainer:          "45727078+danielpancake@users.noreply.github.com"
+copyright:           "danielpancake & Leon Parepko 2022 - 2023"
 
 extra-source-files:
 - README.md

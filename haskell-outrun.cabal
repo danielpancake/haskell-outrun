@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -10,8 +10,8 @@ description:    OutRun clone game made in Haskell
 homepage:       https://github.com/danielpancake/haskell-outrun#readme
 bug-reports:    https://github.com/danielpancake/haskell-outrun/issues
 author:         danielpancake and Leon Parepko
-maintainer:     d.satarov@innopolis.university
-copyright:      2022 danielpancake & Leon Parepko
+maintainer:     45727078+danielpancake@users.noreply.github.com
+copyright:      danielpancake & Leon Parepko 2022 - 2023
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
